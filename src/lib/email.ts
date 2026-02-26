@@ -1,7 +1,7 @@
 import { Resend } from 'resend'
 
-// Inicializar Resend (gratuito hasta 3000 emails/mes)
-const resend = new Resend(process.env.RESEND_API_KEY)
+// Inicializar Resend solo si hay API key (para evitar errores en build)
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
 
 interface EmailData {
   to: string | string[]
@@ -342,7 +342,7 @@ Sube los documentos en: https://deudasacero-panel.vercel.app
 export async function sendEmail(data: EmailData): Promise<{ success: boolean; error?: string }> {
   try {
     // Si no hay API key de Resend, log y simular éxito
-    if (!process.env.RESEND_API_KEY) {
+    if (!process.env.RESEND_API_KEY || !resend) {
       console.log('📧 [DEV] Email simulado:', {
         to: data.to,
         subject: data.subject,
