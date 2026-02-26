@@ -3,7 +3,6 @@
   "devCommand": "next dev",
   "installCommand": "npm install",
   "framework": "nextjs",
-  "regions": ["mad1"],
   "env": {
     "DATABASE_URL": "@database_url",
     "JWT_SECRET": "@jwt_secret"
