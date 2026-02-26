@@ -21,6 +21,7 @@ model Usuario {
   email        String   @unique
   password     String
   nombre       String
+  apellidos    String?
   telefono     String?
   nif          String?
   rol          String   @default("cliente") // admin, abogado, cliente
@@ -29,13 +30,34 @@ model Usuario {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  // Campos adicionales de perfil
+  direccion       String?
+  codigoPostal    String?
+  ciudad          String?
+  provincia       String?
+  
+  // Datos de facturación
+  nombreFacturacion  String?
+  nifFacturacion     String?
+  direccionFacturacion String?
+  
+  // Solo para abogados
+  numeroColegiado  String?
+  
+  // Email verificado
+  emailVerificado  Boolean @default(false)
+  
   // Relaciones
   expedientesComoCliente  Expediente[]  @relation("ClienteExpedientes")
   expedientesComoAbogado  Expediente[]  @relation("AbogadoExpedientes")
   mensajes                Mensaje[]
+  mensajesEnviados        MensajeDirecto[]  @relation("MensajesEnviados")
+  mensajesRecibidos       MensajeDirecto[]  @relation("MensajesRecibidos")
+  conversaciones          ConversacionParticipante[]
   acciones                AuditLog[]
   firmas                  Firma[]
   documentosSubidos       Documento[]
+  facturas                Factura[]
 
   @@index([email])
   @@index([rol])
@@ -86,6 +108,7 @@ model Expediente {
   facturacion         Facturacion?
   firmas              Firma[]
   checklist           ChecklistDocumento[]
+  facturas            Factura[]
   
   @@index([referencia])
   @@index([faseActual])
@@ -127,9 +150,11 @@ model Documento {
   tipo           String    // DNI, IRPF, auto, nomina, certificado, otro
   ruta           String?
   contenido      String?   @db.Text
+  nombreArchivo  String?   // Nombre original del archivo
   estado         String    @default("pendiente") // pendiente, subido, revisado, incorrecto, no_aplica
   esRequerido    Boolean   @default(false)
   esJudicial     Boolean   @default(false)
+  fase           Int?      // Fase del expediente donde se subió
   fechaSubida    DateTime?
   subidoPorId    String?
   notas          String?
@@ -142,6 +167,7 @@ model Documento {
   @@index([expedienteId])
   @@index([tipo])
   @@index([estado])
+  @@index([fase])
 }
 
 model DocumentoJudicial {
@@ -300,4 +326,90 @@ model FAQ {
   activo    Boolean @default(true)
 
   @@index([orden])
+}
+
+// =============================================
+// MENSAJES DIRECTOS (Chat entre usuarios)
+// =============================================
+
+model Conversacion {
+  id          String   @id @default(cuid())
+  tipo        String   @default("directo") // directo, grupo
+  asunto      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  participantes  ConversacionParticipante[]
+  mensajes       MensajeDirecto[]
+
+  @@index([updatedAt])
+}
+
+model ConversacionParticipante {
+  id              String   @id @default(cuid())
+  conversacionId  String
+  usuarioId       String
+  ultimoLeido     DateTime?
+  notificaciones  Boolean  @default(true)
+  
+  createdAt DateTime @default(now())
+
+  conversacion Conversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+  usuario      Usuario      @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([conversacionId, usuarioId])
+  @@index([conversacionId])
+  @@index([usuarioId])
+}
+
+model MensajeDirecto {
+  id              String    @id @default(cuid())
+  conversacionId  String
+  remitenteId     String
+  texto           String    @db.Text
+  leido           Boolean   @default(false)
+  fechaEnvio      DateTime  @default(now())
+  
+  // Adjunto
+  archivoNombre   String?
+  archivoContenido String?  @db.Text
+  archivoTipo     String?
+  
+  createdAt DateTime @default(now())
+
+  conversacion Conversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+  remitente    Usuario      @relation("MensajesEnviados", fields: [remitenteId], references: [id], onDelete: Cascade)
+
+  @@index([conversacionId])
+  @@index([remitenteId])
+  @@index([fechaEnvio])
+}
+
+// =============================================
+// FACTURAS (para clientes)
+// =============================================
+
+model Factura {
+  id             String    @id @default(cuid())
+  usuarioId      String
+  expedienteId   String?
+  numero         String
+  fechaEmision   DateTime  @default(now())
+  fechaVencimiento DateTime?
+  estado         String    @default("emitida") // emitida, pagada, vencida, anulada
+  importe        Float
+  concepto       String
+  contenido      String?   @db.Text  // PDF en base64
+  notas          String?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  usuario    Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  expediente Expediente? @relation(fields: [expedienteId], references: [id], onDelete: SetNull)
+
+  @@unique([numero])
+  @@index([usuarioId])
+  @@index([estado])
+  @@index([fechaEmision])
 }

@@ -13,10 +13,13 @@ import {
   LogOut,
   Menu,
   X,
-  Settings
+  Settings,
+  User,
+  CreditCard,
+  FileCheck
 } from 'lucide-react'
 
-type Section = 'dashboard' | 'expediente' | 'documentos' | 'mensajes' | 'faq' | 'admin' | 'abogados'
+type Section = 'dashboard' | 'expediente' | 'documentos' | 'mensajes' | 'faq' | 'admin' | 'abogados' | 'perfil' | 'pagos' | 'facturas'
 
 interface SidebarProps {
   currentSection: Section
@@ -32,6 +35,9 @@ const allMenuItems = [
   { id: 'expediente' as Section, label: 'Mi Expediente', icon: FileText },
   { id: 'documentos' as Section, label: 'Documentos', icon: Upload },
   { id: 'mensajes' as Section, label: 'Mensajes', icon: MessageSquare },
+  { id: 'pagos' as Section, label: 'Mis Pagos', icon: CreditCard },
+  { id: 'facturas' as Section, label: 'Facturas', icon: FileCheck },
+  { id: 'perfil' as Section, label: 'Mi Perfil', icon: User },
   { id: 'faq' as Section, label: 'Ayuda', icon: HelpCircle },
   { id: 'admin' as Section, label: 'Administración', icon: Settings },
 ]

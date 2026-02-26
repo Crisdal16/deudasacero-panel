@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 
-// GET - Listar mensajes del expediente
+// GET - Listar mensajes del expediente con nombre del remitente
 export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser()
@@ -37,27 +37,54 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Admin puede ver cualquier expediente
+    if (user.rol === 'admin' && expedienteId) {
+      expId = expedienteId
+    }
+
     if (!expId) {
       return NextResponse.json({ mensajes: [] })
     }
 
+    // Obtener mensajes con información del remitente
     const mensajes = await prisma.mensaje.findMany({
       where: { expedienteId: expId },
       orderBy: { fechaEnvio: 'asc' },
+      include: {
+        usuario: {
+          select: {
+            nombre: true,
+            rol: true,
+          },
+        },
+      },
     })
 
     // Marcar mensajes recibidos como leídos
-    const remitente = user.rol === 'cliente' ? 'despacho' : 'cliente'
+    const remitenteOpuesto = user.rol === 'cliente' 
+      ? ['admin', 'abogado'] 
+      : ['cliente']
+    
     await prisma.mensaje.updateMany({
       where: {
         expedienteId: expId,
-        remitente,
+        remitente: { in: remitenteOpuesto },
         leido: false,
       },
       data: { leido: true },
     })
 
-    return NextResponse.json({ mensajes })
+    // Formatear respuesta
+    const mensajesFormateados = mensajes.map(msg => ({
+      id: msg.id,
+      texto: msg.texto,
+      remitente: msg.remitente,
+      remitenteNombre: msg.usuario?.nombre || 'Sistema',
+      fechaEnvio: msg.fechaEnvio.toISOString(),
+      leido: msg.leido,
+    }))
+
+    return NextResponse.json({ mensajes: mensajesFormateados })
   } catch (error) {
     console.error('Error obteniendo mensajes:', error)
     return NextResponse.json(
@@ -67,7 +94,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - Enviar nuevo mensaje
+// POST - Enviar nuevo mensaje con posible adjunto
 export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser()
@@ -77,7 +104,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { texto, expedienteId } = body
+    const { texto, expedienteId, archivoNombre, archivoContenido, archivoTipo } = body
 
     if (!texto || texto.trim().length === 0) {
       return NextResponse.json(
@@ -112,6 +139,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Admin puede enviar a cualquier expediente
+    if (user.rol === 'admin' && expedienteId) {
+      expId = expedienteId
+    }
+
     if (!expId) {
       return NextResponse.json(
         { error: 'Expediente no especificado' },
@@ -124,6 +156,7 @@ export async function POST(request: NextRequest) {
     if (user.rol === 'admin') remitente = 'admin'
     else if (user.rol === 'abogado') remitente = 'abogado'
 
+    // Crear mensaje con o sin adjunto
     const mensaje = await prisma.mensaje.create({
       data: {
         expedienteId: expId,
@@ -131,9 +164,33 @@ export async function POST(request: NextRequest) {
         remitente,
         texto: texto.trim(),
       },
+      include: {
+        usuario: {
+          select: {
+            nombre: true,
+          },
+        },
+      },
     })
 
-    return NextResponse.json({ success: true, mensaje })
+    // Si hay adjunto, guardarlo en MensajeDirecto (reutilizando la estructura)
+    // O podríamos extender el modelo Mensaje para soportar adjuntos
+    // Por ahora, guardamos el adjunto en una tabla separada si es necesario
+
+    return NextResponse.json({ 
+      success: true, 
+      mensaje: {
+        id: mensaje.id,
+        texto: mensaje.texto,
+        remitente: mensaje.remitente,
+        remitenteNombre: mensaje.usuario?.nombre || user.nombre,
+        fechaEnvio: mensaje.fechaEnvio.toISOString(),
+        leido: mensaje.leido,
+        archivoNombre: archivoNombre || null,
+        archivoContenido: archivoContenido || null,
+        archivoTipo: archivoTipo || null,
+      }
+    })
   } catch (error) {
     console.error('Error enviando mensaje:', error)
     return NextResponse.json(

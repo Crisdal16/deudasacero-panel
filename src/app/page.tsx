@@ -10,17 +10,30 @@ import { Mensajes } from '@/components/deudasacero/Mensajes'
 import { FAQSection } from '@/components/deudasacero/FAQ'
 import { AdminPanelV2 } from '@/components/deudasacero/AdminPanelV2'
 import { AbogadoPanel } from '@/components/deudasacero/AbogadoPanel'
+import { PerfilUsuario } from '@/components/deudasacero/PerfilUsuario'
+import { PagosFacturas } from '@/components/deudasacero/PagosFacturas'
 import { useToast } from '@/hooks/use-toast'
 import { Loader2 } from 'lucide-react'
 
-type Section = 'dashboard' | 'expediente' | 'documentos' | 'mensajes' | 'faq' | 'admin' | 'abogados'
+type Section = 'dashboard' | 'expediente' | 'documentos' | 'mensajes' | 'faq' | 'admin' | 'abogados' | 'perfil' | 'pagos'
 
 interface User {
   id: string
   email: string
   nombre: string
+  apellidos?: string
+  telefono?: string
+  nif?: string
   rol: 'admin' | 'abogado' | 'cliente'
   activo: boolean
+  direccion?: string
+  codigoPostal?: string
+  ciudad?: string
+  provincia?: string
+  nombreFacturacion?: string
+  nifFacturacion?: string
+  direccionFacturacion?: string
+  numeroColegiado?: string
   expedientesAsignados?: number
   expedienteCliente?: {
     id: string
@@ -70,6 +83,7 @@ interface Expediente {
     estado: string
     esRequerido: boolean
     fechaSubida: string
+    contenido?: string | null
   }>
   checklist: Array<{
     id: string
@@ -83,6 +97,7 @@ interface Expediente {
     id: string
     texto: string
     remitente: string
+    remitenteNombre?: string
     fechaEnvio: string
     leido: boolean
   }>
@@ -105,6 +120,8 @@ export default function Home() {
   const [expediente, setExpediente] = useState<Expediente | null>(null)
   const [documentos, setDocumentos] = useState<Expediente['documentos']>([])
   const [checklist, setChecklist] = useState<Expediente['checklist']>([])
+  const [faseActual, setFaseActual] = useState(1)
+  const [expedienteId, setExpedienteId] = useState<string | null>(null)
   const [mensajes, setMensajes] = useState<Expediente['mensajes']>([])
   const [faqs, setFaqs] = useState<FAQ[]>([])
   
@@ -183,6 +200,8 @@ export default function Home() {
       const data = await res.json()
       setDocumentos(data.documentos || [])
       setChecklist(data.checklist || [])
+      setFaseActual(data.faseActual || 1)
+      setExpedienteId(data.expedienteId || null)
     } catch (error) {
       console.error('Error fetching documentos:', error)
     }
@@ -291,7 +310,7 @@ export default function Home() {
     }
   }
 
-  const handleUploadDocumento = async (data: { nombre: string; tipo: string }) => {
+  const handleUploadDocumento = async (data: { nombre: string; tipo: string; contenido?: string }) => {
     const res = await fetch('/api/documentos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -301,14 +320,18 @@ export default function Home() {
     fetchDocumentos()
   }
 
-  const handleEnviarMensaje = async (texto: string) => {
+  const handleEnviarMensaje = async (texto: string, archivo?: { nombre: string; contenido: string; tipo: string }) => {
     const res = await fetch('/api/mensajes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ texto }),
+      body: JSON.stringify({ texto, ...archivo }),
     })
     if (!res.ok) throw new Error('Error al enviar mensaje')
     fetchMensajes()
+  }
+
+  const handleUpdateProfile = (updatedUser: Partial<User>) => {
+    setUser(prev => prev ? { ...prev, ...updatedUser } : null)
   }
 
   // Pantalla de carga
@@ -339,9 +362,9 @@ export default function Home() {
     if (user.rol === 'admin') {
       return ['admin', 'faq']
     } else if (user.rol === 'abogado') {
-      return ['dashboard', 'documentos', 'mensajes', 'faq']
+      return ['dashboard', 'documentos', 'mensajes', 'perfil', 'faq']
     }
-    return ['dashboard', 'expediente', 'documentos', 'mensajes', 'faq']
+    return ['dashboard', 'expediente', 'documentos', 'mensajes', 'perfil', 'pagos', 'faq']
   }
 
   // Aplicación principal
@@ -381,7 +404,11 @@ export default function Home() {
             <Documentos 
               documentos={documentos}
               checklist={checklist}
+              faseActual={faseActual}
+              userRol={user.rol}
+              expedienteId={expedienteId || undefined}
               onUpload={handleUploadDocumento}
+              onRefresh={fetchDocumentos}
             />
           )}
           
@@ -390,7 +417,21 @@ export default function Home() {
               mensajes={mensajes}
               onEnviar={handleEnviarMensaje}
               usuarioNombre={user.nombre}
+              usuarioRol={user.rol}
             />
+          )}
+          
+          {/* PERFIL - Todos los roles */}
+          {currentSection === 'perfil' && (
+            <PerfilUsuario 
+              user={user}
+              onUpdate={handleUpdateProfile}
+            />
+          )}
+
+          {/* PAGOS Y FACTURAS - Cliente */}
+          {user.rol === 'cliente' && currentSection === 'pagos' && (
+            <PagosFacturas userRol={user.rol} />
           )}
           
           {currentSection === 'faq' && (
