@@ -7,7 +7,6 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
-import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Table,
@@ -38,19 +37,14 @@ import {
   MessageSquare, 
   TrendingUp,
   Clock,
-  CheckCircle2,
   Edit,
   Euro,
   UserPlus,
   RefreshCw,
-  Scale,
   ArrowRight,
-  ChevronRight,
-  UserCog,
   Loader2
 } from 'lucide-react'
 import { TimelineSelector, fasesLSO } from './Timeline'
-import { cn } from '@/lib/utils'
 
 interface Expediente {
   id: string
@@ -134,9 +128,6 @@ export function AdminPanelV2() {
     referencia: '',
     tipoProcedimiento: 'persona_fisica',
   })
-
-  // Notas internas
-  const [notasInternas, setNotasInternas] = useState('')
 
   const fetchData = async () => {
     setLoading(true)
@@ -332,7 +323,6 @@ export function AdminPanelV2() {
 
   const openFaseDialog = (exp: Expediente) => {
     setSelectedExpediente(exp)
-    setNotasInternas(exp.notasInternas || '')
     setShowFaseDialog(true)
   }
 
@@ -343,12 +333,10 @@ export function AdminPanelV2() {
           <h1 className="text-2xl font-bold text-blue-900">Panel de Administración</h1>
           <p className="text-gray-600">Gestiona expedientes, clientes y abogados</p>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={fetchData} variant="outline" disabled={loading}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Actualizar
-          </Button>
-        </div>
+        <Button onClick={fetchData} variant="outline" disabled={loading}>
+          <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+          Actualizar
+        </Button>
       </div>
 
       {/* Estadísticas */}
@@ -681,7 +669,6 @@ export function AdminPanelV2() {
           </DialogHeader>
           
           <div className="space-y-6 py-4">
-            {/* Fase actual */}
             <div className="flex items-center gap-4 p-4 bg-blue-50 rounded-lg">
               <div className="text-center">
                 <p className="text-sm text-gray-500">Fase Actual</p>
@@ -695,7 +682,6 @@ export function AdminPanelV2() {
               </div>
             </div>
 
-            {/* Selector de fase */}
             <div>
               <Label className="text-base font-medium">Seleccionar Nueva Fase</Label>
               <p className="text-sm text-gray-500 mb-3">
@@ -707,7 +693,6 @@ export function AdminPanelV2() {
               />
             </div>
 
-            {/* Información de la fase seleccionada */}
             {selectedExpediente && (
               <div className="p-4 bg-gray-50 rounded-lg">
                 <h4 className="font-medium text-gray-900">
