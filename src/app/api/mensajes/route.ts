@@ -105,7 +105,14 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { texto, expedienteId, archivoNombre, archivoContenido, archivoTipo } = body
+    const { 
+      texto, 
+      expedienteId, 
+      archivoNombre, 
+      archivoContenido, 
+      archivoTipo,
+      destinatario // 'abogado', 'admin', 'cliente'
+    } = body
 
     if (!texto || texto.trim().length === 0) {
       return NextResponse.json(
@@ -122,8 +129,8 @@ export async function POST(request: NextRequest) {
       expediente = await prisma.expediente.findUnique({
         where: { clienteId: user.userId },
         include: {
-          cliente: { select: { nombre: true, email: true } },
-          abogadoAsignado: { select: { nombre: true, email: true } },
+          cliente: { select: { id: true, nombre: true, email: true } },
+          abogadoAsignado: { select: { id: true, nombre: true, email: true } },
         },
       })
       if (!expediente) {
@@ -140,8 +147,8 @@ export async function POST(request: NextRequest) {
       expediente = await prisma.expediente.findUnique({
         where: { id: expedienteId },
         include: {
-          cliente: { select: { nombre: true, email: true } },
-          abogadoAsignado: { select: { nombre: true, email: true } },
+          cliente: { select: { id: true, nombre: true, email: true } },
+          abogadoAsignado: { select: { id: true, nombre: true, email: true } },
         },
       })
       if (!expediente || expediente.abogadoAsignadoId !== user.userId) {
@@ -154,8 +161,8 @@ export async function POST(request: NextRequest) {
       expediente = await prisma.expediente.findUnique({
         where: { id: expedienteId },
         include: {
-          cliente: { select: { nombre: true, email: true } },
-          abogadoAsignado: { select: { nombre: true, email: true } },
+          cliente: { select: { id: true, nombre: true, email: true } },
+          abogadoAsignado: { select: { id: true, nombre: true, email: true } },
         },
       })
       expId = expedienteId
@@ -190,37 +197,88 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // Guardar adjunto si existe (en MensajeDirecto o actualizar el mensaje)
-    // Por ahora devolvemos el adjunto en la respuesta para que el frontend lo maneje
-    // En una implementación completa, se guardaría en una tabla de adjuntos
+    // Si hay adjunto, guardarlo usando MensajeDirecto o actualizar el mensaje
+    // Por ahora, guardamos el adjunto en una estructura separada si es necesario
+    // O podemos extender el modelo Mensaje para incluir adjuntos
 
     // Enviar email de notificación al destinatario correspondiente
     try {
       const remitenteNombre = user.nombre
       
       if (user.rol === 'cliente') {
-        // Notificar al abogado asignado si existe, si no al admin
-        if (expediente.abogadoAsignado?.email) {
-          await sendNewMessageEmail(
-            expediente.abogadoAsignado.email,
-            expediente.abogadoAsignado.nombre,
-            remitenteNombre,
-            texto.trim(),
-            expediente.referencia
-          )
+        // Cliente elige a quién notificar
+        if (destinatario === 'admin') {
+          // Notificar a administración - obtener admin(s)
+          const admins = await prisma.usuario.findMany({
+            where: { rol: 'admin', activo: true },
+            select: { email: true, nombre: true }
+          })
+          
+          for (const admin of admins) {
+            await sendNewMessageEmail(
+              admin.email,
+              admin.nombre,
+              remitenteNombre,
+              texto.trim(),
+              expediente.referencia
+            )
+          }
+        } else {
+          // Por defecto notificar al abogado asignado
+          if (expediente.abogadoAsignado?.email) {
+            await sendNewMessageEmail(
+              expediente.abogadoAsignado.email,
+              expediente.abogadoAsignado.nombre,
+              remitenteNombre,
+              texto.trim(),
+              expediente.referencia
+            )
+          } else {
+            // Si no hay abogado asignado, notificar a admin
+            const admins = await prisma.usuario.findMany({
+              where: { rol: 'admin', activo: true },
+              select: { email: true, nombre: true }
+            })
+            
+            for (const admin of admins) {
+              await sendNewMessageEmail(
+                admin.email,
+                admin.nombre,
+                remitenteNombre,
+                texto.trim(),
+                expediente.referencia
+              )
+            }
+          }
         }
-        // También notificar a la administración (admin principal)
-        // Podríamos tener un email de admin en las variables de entorno
       } else if (user.rol === 'abogado') {
-        // Notificar al cliente
-        if (expediente.cliente?.email) {
-          await sendNewMessageEmail(
-            expediente.cliente.email,
-            expediente.cliente.nombre,
-            remitenteNombre,
-            texto.trim(),
-            expediente.referencia
-          )
+        // Abogado elige a quién notificar
+        if (destinatario === 'admin') {
+          const admins = await prisma.usuario.findMany({
+            where: { rol: 'admin', activo: true },
+            select: { email: true, nombre: true }
+          })
+          
+          for (const admin of admins) {
+            await sendNewMessageEmail(
+              admin.email,
+              admin.nombre,
+              remitenteNombre,
+              texto.trim(),
+              expediente.referencia
+            )
+          }
+        } else {
+          // Notificar al cliente
+          if (expediente.cliente?.email) {
+            await sendNewMessageEmail(
+              expediente.cliente.email,
+              expediente.cliente.nombre,
+              remitenteNombre,
+              texto.trim(),
+              expediente.referencia
+            )
+          }
         }
       } else if (user.rol === 'admin') {
         // Notificar al cliente
@@ -251,6 +309,7 @@ export async function POST(request: NextRequest) {
         archivoNombre: archivoNombre || null,
         archivoContenido: archivoContenido || null,
         archivoTipo: archivoTipo || null,
+        destinatario: destinatario || null,
       }
     })
   } catch (error) {

@@ -7,7 +7,6 @@ import { Input } from '@/components/ui/input'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Separator } from '@/components/ui/separator'
 import {
   Dialog,
   DialogContent,
@@ -25,9 +24,9 @@ import {
   Paperclip,
   Download,
   Eye,
-  FileText,
   CheckCheck,
-  Check
+  Check,
+  ArrowLeft
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -41,30 +40,15 @@ interface Mensaje {
   archivoNombre?: string | null
   archivoContenido?: string | null
   archivoTipo?: string | null
-}
-
-interface Conversacion {
-  id: string
-  tipo: string
-  asunto?: string | null
-  updatedAt: string
-  participantes: Array<{
-    id: string
-    nombre: string
-    rol: string
-  }>
-  mensajes: Mensaje[]
-  noLeidos?: number
+  destinatario?: string
 }
 
 interface MensajesProps {
   mensajes: Mensaje[]
-  onEnviar: (texto: string, archivo?: { nombre: string; contenido: string; tipo: string }) => Promise<void>
+  onEnviar: (texto: string, archivo?: { nombre: string; contenido: string; tipo: string }, destinatario?: string) => Promise<void>
   usuarioNombre: string
   usuarioRol: 'admin' | 'abogado' | 'cliente'
-  conversaciones?: Conversacion[]
-  conversacionActiva?: string | null
-  onSelectConversacion?: (id: string) => void
+  abogadoNombre?: string
 }
 
 export function Mensajes({ 
@@ -72,9 +56,7 @@ export function Mensajes({
   onEnviar, 
   usuarioNombre, 
   usuarioRol,
-  conversaciones,
-  conversacionActiva,
-  onSelectConversacion
+  abogadoNombre
 }: MensajesProps) {
   const [nuevoMensaje, setNuevoMensaje] = useState('')
   const [enviando, setEnviando] = useState(false)
@@ -82,6 +64,8 @@ export function Mensajes({
   const [filePreview, setFilePreview] = useState<string | null>(null)
   const [showPreview, setShowPreview] = useState(false)
   const [previewAttachment, setPreviewAttachment] = useState<Mensaje | null>(null)
+  const [destinatarioSeleccionado, setDestinatarioSeleccionado] = useState<string>('abogado')
+  const [showDestinatarioSelector, setShowDestinatarioSelector] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
@@ -120,7 +104,6 @@ export function Mensajes({
     const file = e.target.files?.[0]
     if (!file) return
 
-    // Validar tamaño (max 5MB para mensajes)
     if (file.size > 5 * 1024 * 1024) {
       toast({
         title: 'Archivo demasiado grande',
@@ -158,12 +141,13 @@ export function Mensajes({
           nombre: selectedFile.name,
           contenido: filePreview,
           tipo: selectedFile.type,
-        })
+        }, destinatarioSeleccionado)
       } else {
-        await onEnviar(nuevoMensaje.trim())
+        await onEnviar(nuevoMensaje.trim(), undefined, destinatarioSeleccionado)
       }
       setNuevoMensaje('')
       removeFile()
+      setShowDestinatarioSelector(false)
     } catch (error) {
       console.error('Error enviando mensaje:', error)
       toast({
@@ -240,244 +224,243 @@ export function Mensajes({
     return false
   }
 
-  // Renderizar sidebar de conversaciones si hay
-  const renderConversacionesSidebar = () => {
-    if (!conversaciones || conversaciones.length === 0) return null
-    
-    return (
-      <div className="w-80 border-r bg-gray-50 flex flex-col">
-        <div className="p-4 border-b">
-          <h3 className="font-semibold text-blue-900">Conversaciones</h3>
-        </div>
-        <ScrollArea className="flex-1">
-          <div className="p-2 space-y-1">
-            {conversaciones.map((conv) => (
-              <button
-                key={conv.id}
-                onClick={() => onSelectConversacion?.(conv.id)}
-                className={cn(
-                  "w-full text-left p-3 rounded-lg transition-colors",
-                  conversacionActiva === conv.id
-                    ? "bg-blue-100 border-blue-200"
-                    : "hover:bg-gray-100"
-                )}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Avatar className="w-8 h-8">
-                      <AvatarFallback className="bg-blue-600 text-white text-xs">
-                        {conv.participantes[0]?.nombre.charAt(0) || '?'}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-medium text-sm">
-                        {conv.participantes.find(p => p.rol !== usuarioRol)?.nombre || 'Conversación'}
-                      </p>
-                      <p className="text-xs text-gray-500 truncate max-w-[150px]">
-                        {conv.asunto || conv.mensajes[conv.mensajes.length - 1]?.texto?.substring(0, 30)}...
-                      </p>
-                    </div>
-                  </div>
-                  {conv.noLeidos && conv.noLeidos > 0 && (
-                    <Badge className="bg-red-500 text-white text-xs">
-                      {conv.noLeidos}
-                    </Badge>
-                  )}
-                </div>
-              </button>
-            ))}
-          </div>
-        </ScrollArea>
-      </div>
-    )
+  // Obtener opciones de destinatario según el rol
+  const getDestinatariosOptions = () => {
+    if (usuarioRol === 'cliente') {
+      return [
+        { value: 'abogado', label: abogadoNombre || 'Mi Abogado', icon: User },
+        { value: 'admin', label: 'Administración', icon: Building2 },
+      ]
+    }
+    if (usuarioRol === 'abogado') {
+      return [
+        { value: 'cliente', label: 'Cliente', icon: User },
+        { value: 'admin', label: 'Administración', icon: Building2 },
+      ]
+    }
+    return [
+      { value: 'cliente', label: 'Cliente', icon: User },
+      { value: 'abogado', label: 'Abogado', icon: User },
+    ]
   }
 
-  return (
-    <div className="flex h-[calc(100vh-200px)]">
-      {/* Sidebar de conversaciones (si aplica) */}
-      {conversaciones && conversaciones.length > 0 && renderConversacionesSidebar()}
-      
-      {/* Área principal de chat */}
-      <div className="flex-1 flex flex-col">
-        <div className="mb-4 px-4">
-          <h1 className="text-2xl font-bold text-blue-900">Mensajes</h1>
-          <p className="text-gray-600">
-            Comunicación directa con {usuarioRol === 'cliente' ? 'tu despacho' : 'tus clientes'}
-          </p>
-        </div>
+  const destinatarios = getDestinatariosOptions()
 
-        <Card className="flex-1 flex flex-col border-blue-100">
-          <CardHeader className="border-b bg-gray-50">
-            <CardTitle className="flex items-center gap-2 text-blue-900">
+  return (
+    <div className="flex flex-col h-[calc(100vh-200px)]">
+      <div className="mb-4 px-4">
+        <h1 className="text-2xl font-bold text-blue-900">Mensajes</h1>
+        <p className="text-gray-600">
+          Comunicación directa con {usuarioRol === 'cliente' ? 'tu despacho' : usuarioRol === 'abogado' ? 'tus clientes y administración' : 'todos los usuarios'}
+        </p>
+      </div>
+
+      <Card className="flex-1 flex flex-col border-blue-100">
+        <CardHeader className="border-b bg-gray-50">
+          <CardTitle className="flex items-center justify-between text-blue-900">
+            <div className="flex items-center gap-2">
               <MessageSquare className="w-5 h-5" />
-              Chat
-            </CardTitle>
-          </CardHeader>
-          
-          <CardContent className="flex-1 overflow-hidden p-0">
-            <ScrollArea ref={scrollRef} className="h-full">
-              <div className="p-4 space-y-4">
-                {mensajes.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-gray-500 py-12">
-                    <MessageSquare className="w-16 h-16 mb-4 text-gray-300" />
-                    <p>No hay mensajes todavía</p>
-                    <p className="text-sm">Envía un mensaje para iniciar la conversación</p>
-                  </div>
-                ) : (
-                  mensajesAgrupados.map((grupo, idx) => (
-                    <div key={idx} className="space-y-3">
-                      <div className="flex justify-center">
-                        <Badge variant="outline" className="bg-gray-100 text-gray-600 font-normal">
-                          {grupo.fecha}
-                        </Badge>
-                      </div>
+              <span>Chat</span>
+            </div>
+            
+            {/* Selector de destinatario */}
+            {usuarioRol !== 'admin' && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-normal text-gray-600">Enviar a:</span>
+                <div className="flex gap-1">
+                  {destinatarios.map((dest) => {
+                    const DestIcon = dest.icon
+                    return (
+                      <Button
+                        key={dest.value}
+                        variant={destinatarioSeleccionado === dest.value ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setDestinatarioSeleccionado(dest.value)}
+                        className={cn(
+                          "text-xs",
+                          destinatarioSeleccionado === dest.value && "bg-blue-900 hover:bg-blue-800"
+                        )}
+                      >
+                        <DestIcon className="w-3 h-3 mr-1" />
+                        {dest.label}
+                      </Button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </CardTitle>
+        </CardHeader>
+        
+        <CardContent className="flex-1 overflow-hidden p-0">
+          <ScrollArea ref={scrollRef} className="h-full">
+            <div className="p-4 space-y-4">
+              {mensajes.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-gray-500 py-12">
+                  <MessageSquare className="w-16 h-16 mb-4 text-gray-300" />
+                  <p>No hay mensajes todavía</p>
+                  <p className="text-sm">Envía un mensaje para iniciar la conversación</p>
+                </div>
+              ) : (
+                mensajesAgrupados.map((grupo, idx) => (
+                  <div key={idx} className="space-y-3">
+                    <div className="flex justify-center">
+                      <Badge variant="outline" className="bg-gray-100 text-gray-600 font-normal">
+                        {grupo.fecha}
+                      </Badge>
+                    </div>
+                    
+                    {grupo.mensajes.map((msg) => {
+                      const isOwn = isCurrentUser(msg)
+                      const remitenteInfo = getRemitenteInfo(msg.remitente)
+                      const RemitenteIcon = remitenteInfo.icon
                       
-                      {grupo.mensajes.map((msg) => {
-                        const isOwn = isCurrentUser(msg)
-                        const remitenteInfo = getRemitenteInfo(msg.remitente)
-                        const RemitenteIcon = remitenteInfo.icon
-                        
-                        return (
-                          <div 
-                            key={msg.id}
-                            className={cn("flex gap-3", isOwn ? "justify-end" : "justify-start")}
-                          >
-                            {!isOwn && (
-                              <Avatar className={cn("w-8 h-8", remitenteInfo.color)}>
-                                <AvatarFallback className={cn(remitenteInfo.color, "text-white")}>
-                                  <RemitenteIcon className="w-4 h-4" />
-                                </AvatarFallback>
-                              </Avatar>
+                      return (
+                        <div 
+                          key={msg.id}
+                          className={cn("flex gap-3", isOwn ? "justify-end" : "justify-start")}
+                        >
+                          {!isOwn && (
+                            <Avatar className={cn("w-8 h-8", remitenteInfo.color)}>
+                              <AvatarFallback className={cn(remitenteInfo.color, "text-white")}>
+                                <RemitenteIcon className="w-4 h-4" />
+                              </AvatarFallback>
+                            </Avatar>
+                          )}
+                          
+                          <div className={cn(
+                            "max-w-[70%]",
+                            isOwn 
+                              ? "bg-green-600 text-white rounded-2xl rounded-br-sm" 
+                              : "bg-gray-100 text-gray-900 rounded-2xl rounded-bl-sm",
+                            "p-3"
+                          )}>
+                            {/* Nombre del remitente */}
+                            {!isOwn && msg.remitenteNombre && (
+                              <p className="text-xs font-medium text-blue-600 mb-1">
+                                {msg.remitenteNombre}
+                                {msg.destinatario && (
+                                  <span className="text-gray-400 ml-2">
+                                    → {msg.destinatario === 'admin' ? 'Administración' : msg.destinatario === 'abogado' ? 'Abogado' : 'Cliente'}
+                                  </span>
+                                )}
+                              </p>
+                            )}
+                            
+                            <p className="text-sm">{msg.texto}</p>
+                            
+                            {/* Adjunto */}
+                            {msg.archivoContenido && (
+                              <div className={cn(
+                                "mt-2 p-2 rounded-lg flex items-center gap-2",
+                                isOwn ? "bg-green-700" : "bg-gray-200"
+                              )}>
+                                <Paperclip className="w-4 h-4" />
+                                <span className="text-sm flex-1 truncate">
+                                  {msg.archivoNombre}
+                                </span>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className={cn("h-6 w-6 p-0", isOwn && "text-white hover:bg-green-600")}
+                                  onClick={() => handlePreviewAttachment(msg)}
+                                >
+                                  <Eye className="w-3 h-3" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className={cn("h-6 w-6 p-0", isOwn && "text-white hover:bg-green-600")}
+                                  onClick={() => handleDownloadAttachment(msg)}
+                                >
+                                  <Download className="w-3 h-3" />
+                                </Button>
+                              </div>
                             )}
                             
                             <div className={cn(
-                              "max-w-[70%]",
-                              isOwn 
-                                ? "bg-green-600 text-white rounded-2xl rounded-br-sm" 
-                                : "bg-gray-100 text-gray-900 rounded-2xl rounded-bl-sm",
-                              "p-3"
+                              "flex items-center justify-end gap-1 mt-1",
+                              isOwn ? "text-green-100" : "text-gray-500"
                             )}>
-                              {/* Nombre del remitente */}
-                              {!isOwn && msg.remitenteNombre && (
-                                <p className="text-xs font-medium text-blue-600 mb-1">
-                                  {msg.remitenteNombre}
-                                </p>
+                              <span className="text-xs">
+                                {formatHoraCorta(msg.fechaEnvio)}
+                              </span>
+                              {isOwn && (
+                                msg.leido 
+                                  ? <CheckCheck className="w-3 h-3" />
+                                  : <Check className="w-3 h-3" />
                               )}
-                              
-                              <p className="text-sm">{msg.texto}</p>
-                              
-                              {/* Adjunto */}
-                              {msg.archivoContenido && (
-                                <div className={cn(
-                                  "mt-2 p-2 rounded-lg flex items-center gap-2",
-                                  isOwn ? "bg-green-700" : "bg-gray-200"
-                                )}>
-                                  <Paperclip className="w-4 h-4" />
-                                  <span className="text-sm flex-1 truncate">
-                                    {msg.archivoNombre}
-                                  </span>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className={cn("h-6 w-6 p-0", isOwn && "text-white hover:bg-green-600")}
-                                    onClick={() => handlePreviewAttachment(msg)}
-                                  >
-                                    <Eye className="w-3 h-3" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className={cn("h-6 w-6 p-0", isOwn && "text-white hover:bg-green-600")}
-                                    onClick={() => handleDownloadAttachment(msg)}
-                                  >
-                                    <Download className="w-3 h-3" />
-                                  </Button>
-                                </div>
-                              )}
-                              
-                              <div className={cn(
-                                "flex items-center justify-end gap-1 mt-1",
-                                isOwn ? "text-green-100" : "text-gray-500"
-                              )}>
-                                <span className="text-xs">
-                                  {formatHoraCorta(msg.fechaEnvio)}
-                                </span>
-                                {isOwn && (
-                                  msg.leido 
-                                    ? <CheckCheck className="w-3 h-3" />
-                                    : <Check className="w-3 h-3" />
-                                )}
-                              </div>
                             </div>
-                            
-                            {isOwn && (
-                              <Avatar className="w-8 h-8 bg-green-600">
-                                <AvatarFallback className="bg-green-600 text-white">
-                                  {usuarioNombre.charAt(0).toUpperCase()}
-                                </AvatarFallback>
-                              </Avatar>
-                            )}
                           </div>
-                        )
-                      })}
-                    </div>
-                  ))
-                )}
-              </div>
-            </ScrollArea>
-          </CardContent>
-
-          {/* Preview del archivo seleccionado */}
-          {selectedFile && filePreview && (
-            <div className="border-t p-3 bg-gray-50">
-              <div className="flex items-center gap-2">
-                <Paperclip className="w-4 h-4 text-gray-500" />
-                <span className="text-sm flex-1 truncate">{selectedFile.name}</span>
-                <Button variant="ghost" size="sm" onClick={removeFile}>
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          )}
-
-          <form onSubmit={handleEnviar} className="border-t p-4 flex gap-2 items-center">
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-              onChange={handleFileSelect}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={enviando}
-            >
-              <Paperclip className="w-4 h-4" />
-            </Button>
-            <Input
-              placeholder="Escribe tu mensaje..."
-              value={nuevoMensaje}
-              onChange={(e) => setNuevoMensaje(e.target.value)}
-              disabled={enviando}
-              className="flex-1"
-            />
-            <Button 
-              type="submit" 
-              className="bg-blue-900 hover:bg-blue-800" 
-              disabled={enviando || (!nuevoMensaje.trim() && !selectedFile)}
-            >
-              {enviando ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Send className="w-4 h-4" />
+                          
+                          {isOwn && (
+                            <Avatar className="w-8 h-8 bg-green-600">
+                              <AvatarFallback className="bg-green-600 text-white">
+                                {usuarioNombre.charAt(0).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                ))
               )}
-            </Button>
-          </form>
-        </Card>
-      </div>
+            </div>
+          </ScrollArea>
+        </CardContent>
+
+        {/* Preview del archivo seleccionado */}
+        {selectedFile && filePreview && (
+          <div className="border-t p-3 bg-gray-50">
+            <div className="flex items-center gap-2">
+              <Paperclip className="w-4 h-4 text-gray-500" />
+              <span className="text-sm flex-1 truncate">{selectedFile.name}</span>
+              <Button variant="ghost" size="sm" onClick={removeFile}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <form onSubmit={handleEnviar} className="border-t p-4 flex gap-2 items-center">
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+            onChange={handleFileSelect}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={enviando}
+            title="Adjuntar archivo"
+          >
+            <Paperclip className="w-4 h-4" />
+          </Button>
+          <Input
+            placeholder={`Escribe tu mensaje para ${destinatarioSeleccionado === 'admin' ? 'Administración' : destinatarioSeleccionado === 'abogado' ? 'tu abogado' : 'el cliente'}...`}
+            value={nuevoMensaje}
+            onChange={(e) => setNuevoMensaje(e.target.value)}
+            disabled={enviando}
+            className="flex-1"
+          />
+          <Button 
+            type="submit" 
+            className="bg-blue-900 hover:bg-blue-800" 
+            disabled={enviando || (!nuevoMensaje.trim() && !selectedFile)}
+          >
+            {enviando ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Send className="w-4 h-4" />
+            )}
+          </Button>
+        </form>
+      </Card>
 
       {/* Modal de preview de adjunto */}
       <Dialog open={showPreview} onOpenChange={setShowPreview}>

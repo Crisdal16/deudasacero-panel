@@ -365,11 +365,11 @@ export default function Home() {
     fetchPresupuesto()
   }
 
-  const handleEnviarMensaje = async (texto: string, archivo?: { nombre: string; contenido: string; tipo: string }) => {
+  const handleEnviarMensaje = async (texto: string, archivo?: { nombre: string; contenido: string; tipo: string }, destinatario?: string) => {
     const res = await fetch('/api/mensajes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ texto, ...archivo }),
+      body: JSON.stringify({ texto, ...archivo, destinatario }),
     })
     if (!res.ok) throw new Error('Error al enviar mensaje')
     fetchMensajes()
@@ -481,6 +481,7 @@ export default function Home() {
               onEnviar={handleEnviarMensaje}
               usuarioNombre={user.nombre}
               usuarioRol={user.rol}
+              abogadoNombre={expediente?.abogadoAsignadoObj?.nombre}
             />
           )}
           
