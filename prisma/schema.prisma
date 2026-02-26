@@ -220,6 +220,11 @@ model Mensaje {
   leido          Boolean   @default(false)
   fechaEnvio     DateTime  @default(now())
   
+  // Archivo adjunto
+  archivoNombre    String?
+  archivoContenido String?   @db.Text
+  archivoTipo      String?
+  
   expediente Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
   usuario    Usuario    @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
