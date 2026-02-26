@@ -53,23 +53,28 @@ export async function createSession(user: UserPayload): Promise<void> {
 
 // Obtener usuario actual desde la cookie
 export async function getCurrentUser(): Promise<UserPayload | null> {
-  const cookieStore = await cookies()
-  const token = cookieStore.get('session')?.value
-  if (!token) return null
-  
-  const user = verifyToken(token)
-  
-  // Verificar timeout para abogados
-  if (user) {
-    const now = Date.now()
-    const lastAccess = user.ultimoAcceso || now
+  try {
+    const cookieStore = await cookies()
+    const token = cookieStore.get('session')?.value
+    if (!token) return null
     
-    if (user.rol === 'abogado' && (now - lastAccess) > ABOGADO_TIMEOUT * 1000) {
-      return null // Sesión expirada por inactividad
+    const user = await verifyToken(token)
+    
+    // Verificar timeout para abogados
+    if (user) {
+      const now = Date.now()
+      const lastAccess = user.ultimoAcceso || now
+      
+      if (user.rol === 'abogado' && (now - lastAccess) > ABOGADO_TIMEOUT * 1000) {
+        return null // Sesión expirada por inactividad
+      }
     }
+    
+    return user
+  } catch (error) {
+    console.error('Error en getCurrentUser:', error)
+    return null
   }
-  
-  return user
 }
 
 // Cerrar sesión
