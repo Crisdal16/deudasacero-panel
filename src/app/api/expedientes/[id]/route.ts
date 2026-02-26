@@ -96,8 +96,6 @@ export async function GET(
       remitenteNombre: msg.usuario?.nombre || 'Sistema',
       fechaEnvio: msg.fechaEnvio.toISOString(),
       leido: msg.leido,
-      archivoNombre: msg.archivoNombre || (msg as any).archivoNombre,
-      archivoContenido: (msg as any).archivoContenido,
     }))
 
     return NextResponse.json({
