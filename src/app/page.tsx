@@ -12,10 +12,11 @@ import { AdminPanelV2 } from '@/components/deudasacero/AdminPanelV2'
 import { AbogadoPanel } from '@/components/deudasacero/AbogadoPanel'
 import { PerfilUsuario } from '@/components/deudasacero/PerfilUsuario'
 import { PagosFacturas } from '@/components/deudasacero/PagosFacturas'
+import { PresupuestoSection } from '@/components/deudasacero/PresupuestoSection'
 import { useToast } from '@/hooks/use-toast'
 import { Loader2 } from 'lucide-react'
 
-type Section = 'dashboard' | 'expediente' | 'documentos' | 'mensajes' | 'faq' | 'admin' | 'abogados' | 'perfil' | 'pagos'
+type Section = 'dashboard' | 'expediente' | 'documentos' | 'mensajes' | 'faq' | 'admin' | 'abogados' | 'perfil' | 'pagos' | 'presupuesto'
 
 interface User {
   id: string
@@ -84,6 +85,8 @@ interface Expediente {
     esRequerido: boolean
     fechaSubida: string
     contenido?: string | null
+    nombreArchivo?: string | null
+    fase?: number
   }>
   checklist: Array<{
     id: string
@@ -110,6 +113,15 @@ interface FAQ {
   orden: number
 }
 
+interface Presupuesto {
+  id: string
+  nombre: string
+  nombreArchivo?: string | null
+  contenido?: string | null
+  fechaSubida: string
+  estado: string
+}
+
 export default function Home() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
@@ -124,6 +136,7 @@ export default function Home() {
   const [expedienteId, setExpedienteId] = useState<string | null>(null)
   const [mensajes, setMensajes] = useState<Expediente['mensajes']>([])
   const [faqs, setFaqs] = useState<FAQ[]>([])
+  const [presupuesto, setPresupuesto] = useState<Presupuesto | null>(null)
   
   const { toast } = useToast()
 
@@ -149,6 +162,9 @@ export default function Home() {
         if (currentSection === 'faq') {
           fetchFAQs()
         }
+        if (currentSection === 'presupuesto') {
+          fetchPresupuesto()
+        }
       } else if (user.rol === 'abogado') {
         // Abogado ve sus expedientes asignados
         if (currentSection === 'dashboard') {
@@ -157,8 +173,12 @@ export default function Home() {
         if (currentSection === 'mensajes') {
           fetchMensajes()
         }
+      } else if (user.rol === 'admin') {
+        // Admin puede ver presupuesto
+        if (currentSection === 'presupuesto') {
+          fetchPresupuesto()
+        }
       }
-      // Admin no necesita cargar datos en el dashboard
     }
   }, [user, currentSection])
 
@@ -189,6 +209,10 @@ export default function Home() {
       const res = await fetch('/api/expediente')
       const data = await res.json()
       setExpediente(data.expediente)
+      if (data.expediente) {
+        setFaseActual(data.expediente.faseActual)
+        setExpedienteId(data.expediente.id)
+      }
     } catch (error) {
       console.error('Error fetching expediente:', error)
     }
@@ -224,6 +248,16 @@ export default function Home() {
       setFaqs(data.faqs || [])
     } catch (error) {
       console.error('Error fetching FAQs:', error)
+    }
+  }
+
+  const fetchPresupuesto = async () => {
+    try {
+      const res = await fetch('/api/presupuesto')
+      const data = await res.json()
+      setPresupuesto(data.presupuesto || null)
+    } catch (error) {
+      console.error('Error fetching presupuesto:', error)
     }
   }
 
@@ -283,7 +317,7 @@ export default function Home() {
       setCurrentSection('dashboard')
       toast({
         title: '¡Cuenta creada!',
-        description: 'Tu cuenta ha sido creada correctamente',
+        description: 'Tu cuenta ha sido creada correctamente. Revisa tu email para verificar tu cuenta.',
       })
     } catch (error: any) {
       setAuthError(error.message)
@@ -300,6 +334,7 @@ export default function Home() {
       setDocumentos([])
       setChecklist([])
       setMensajes([])
+      setPresupuesto(null)
       setCurrentSection('dashboard')
       toast({
         title: 'Sesión cerrada',
@@ -310,7 +345,7 @@ export default function Home() {
     }
   }
 
-  const handleUploadDocumento = async (data: { nombre: string; tipo: string; contenido?: string }) => {
+  const handleUploadDocumento = async (data: { nombre: string; tipo: string; contenido?: string; nombreArchivo?: string }) => {
     const res = await fetch('/api/documentos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -318,6 +353,16 @@ export default function Home() {
     })
     if (!res.ok) throw new Error('Error al subir documento')
     fetchDocumentos()
+  }
+
+  const handleUploadPresupuesto = async (data: { nombre: string; contenido: string; nombreArchivo: string }) => {
+    const res = await fetch('/api/presupuesto', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+    if (!res.ok) throw new Error('Error al subir presupuesto')
+    fetchPresupuesto()
   }
 
   const handleEnviarMensaje = async (texto: string, archivo?: { nombre: string; contenido: string; tipo: string }) => {
@@ -360,11 +405,16 @@ export default function Home() {
   // Determinar qué secciones mostrar según rol
   const getSections = (): Section[] => {
     if (user.rol === 'admin') {
-      return ['admin', 'faq']
+      return ['admin', 'presupuesto', 'faq']
     } else if (user.rol === 'abogado') {
       return ['dashboard', 'documentos', 'mensajes', 'perfil', 'faq']
     }
-    return ['dashboard', 'expediente', 'documentos', 'mensajes', 'perfil', 'pagos', 'faq']
+    // Cliente ve presupuesto si está en fase 2
+    const sections: Section[] = ['dashboard', 'expediente', 'documentos', 'mensajes', 'perfil', 'pagos', 'faq']
+    if (faseActual === 2) {
+      sections.splice(2, 0, 'presupuesto')
+    }
+    return sections
   }
 
   // Aplicación principal
@@ -400,6 +450,19 @@ export default function Home() {
             <ExpedienteDetalle expediente={expediente} />
           )}
           
+          {/* PRESUPUESTO - Fase 2 */}
+          {currentSection === 'presupuesto' && (
+            <PresupuestoSection 
+              expedienteId={expedienteId || undefined}
+              userRol={user.rol}
+              faseActual={faseActual}
+              presupuesto={presupuesto}
+              onUpload={handleUploadPresupuesto}
+              onRefresh={fetchPresupuesto}
+            />
+          )}
+          
+          {/* DOCUMENTOS */}
           {user.rol === 'cliente' && currentSection === 'documentos' && (
             <Documentos 
               documentos={documentos}

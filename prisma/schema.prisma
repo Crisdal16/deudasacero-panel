@@ -46,6 +46,8 @@ model Usuario {
   
   // Email verificado
   emailVerificado  Boolean @default(false)
+  tokenVerificacion String?
+  tokenVerificacionExpira DateTime?
   
   // Relaciones
   expedientesComoCliente  Expediente[]  @relation("ClienteExpedientes")

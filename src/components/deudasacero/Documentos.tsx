@@ -65,8 +65,9 @@ interface DocumentosProps {
   onRefresh?: () => void
 }
 
-// Documentos obligatorios para Fase 3
-const documentosObligatoriosFase3 = [
+// Documentos por fase
+const documentosPorFase: Record<number, { nombre: string; descripcion: string }[]> = {
+  3: [
   { nombre: 'DNI/NIE (anverso y reverso)', descripcion: 'Documento de identidad en vigor' },
   { nombre: 'Certificado de titularidad y saldo de todas las cuentas bancarias', descripcion: 'Certificados de todos los bancos donde tengas cuenta' },
   { nombre: 'Últimos 6 meses de movimientos de todas las cuentas bancarias', descripcion: 'Extractos bancarios de los últimos 6 meses' },
@@ -76,8 +77,57 @@ const documentosObligatoriosFase3 = [
   { nombre: 'Últimos 3 recibos de cada gasto', descripcion: 'Facturas de luz, agua, internet, alquiler, etc.' },
   { nombre: 'Resumen de donde deriva la deuda', descripcion: 'Explicación de cómo se llegó a la situación actual' },
   { nombre: 'Certificado digital de persona física', descripcion: 'Certificado para obtener documentación oficial' },
-  { nombre: 'Otra documentación que estime conveniente', descripcion: 'Cualquier otro documento relevante' },
-]
+    { nombre: 'Otra documentación que estime conveniente', descripcion: 'Cualquier otro documento relevante' },
+  ],
+  4: [
+    { nombre: 'Demanda de concurso consecutivo', descripcion: 'Demanda presentada ante el juzgado' },
+    { nombre: 'Documentos anexos a la demanda', descripcion: 'Documentación adjunta a la demanda' },
+    { nombre: 'Justificante de presentación', descripcion: 'Resguardo de presentación en el juzgado' },
+  ],
+  5: [
+    { nombre: 'Auto de declaración de concurso', descripcion: 'Auto judicial que declara el concurso' },
+    { nombre: 'Providencia del juzgado', descripcion: 'Comunicaciones del juzgado' },
+    { nombre: 'Designación de administrador concursal', descripcion: 'Nombramiento del administrador' },
+  ],
+  6: [
+    { nombre: 'Inventario de bienes', descripcion: 'Relación de bienes y derechos' },
+    { nombre: 'Lista de acreedores', descripcion: 'Relación de deudas y acreedores' },
+    { nombre: 'Informe de liquidación', descripcion: 'Estado de la fase de liquidación' },
+  ],
+  7: [
+    { nombre: 'Informe de administración concursal', descripcion: 'Informe del administrador concursal' },
+    { nombre: 'Propuesta de convenio', descripcion: 'Propuesta de pago a acreedores' },
+    { nombre: 'Informe de operaciones', descripcion: 'Informe sobre las operaciones realizadas' },
+  ],
+  8: [
+    { nombre: 'Acta de audiencia', descripcion: 'Acta de la junta de acreedores' },
+    { nombre: 'Propuestas de pago aprobadas', descripcion: 'Acuerdos alcanzados con los acreedores' },
+    { nombre: 'Votaciones de acreedores', descripcion: 'Resultado de las votaciones' },
+  ],
+  9: [
+    { nombre: 'Auto de exoneración', descripcion: 'Auto judicial de exoneración de deudas' },
+    { nombre: 'Plan de pagos', descripcion: 'Plan de pagos establecido' },
+    { nombre: 'Resolución judicial definitiva', descripcion: 'Documento judicial definitivo' },
+  ],
+  10: [
+    { nombre: 'Sentencia de cierre', descripcion: 'Sentencia que cierra el procedimiento' },
+    { nombre: 'Certificado de finalización', descripcion: 'Certificado de fin de procedimiento' },
+    { nombre: 'Documentación final completa', descripcion: 'Expediente completo del procedimiento' },
+  ],
+}
+
+const nombresFases: Record<number, string> = {
+  1: 'Inicio del expediente',
+  2: 'Presupuesto y hoja de encargo',
+  3: 'Recopilación de documentación',
+  4: 'Presentación de concurso consecutivo',
+  5: 'Auto de declaración de concurso',
+  6: 'Fase de liquidación',
+  7: 'Informe de administración concursal',
+  8: 'Audiencia con los acreedores',
+  9: 'Auto de exoneración',
+  10: 'Resolución y fin del procedimiento',
+}
 
 export function Documentos({ 
   documentos, 
@@ -363,7 +413,7 @@ export function Documentos({
       </Card>
 
       {/* Lista de documentos obligatorios para Fase 3 */}
-      {faseActual === 3 && (
+      {faseActual === 3 && documentosPorFase[3] && (
         <Card className="border-blue-100">
           <CardHeader className="bg-blue-50">
             <CardTitle className="text-blue-900">📋 Documentación Obligatoria para LSO</CardTitle>
@@ -373,7 +423,7 @@ export function Documentos({
           </CardHeader>
           <CardContent className="pt-4">
             <div className="space-y-2">
-              {documentosObligatoriosFase3.map((doc, index) => {
+              {documentosPorFase[3].map((doc, index) => {
                 const uploadedDoc = documentos.find(d => d.nombre.toLowerCase().includes(doc.nombre.toLowerCase().split(' ')[0]))
                 return (
                   <div 
@@ -768,6 +818,81 @@ export function Documentos({
                     </div>
                   </div>
                 ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Documentos de fases posteriores (4-10) */}
+      {faseActual >= 4 && (
+        <Card className="border-blue-100">
+          <CardHeader className="bg-blue-50">
+            <CardTitle className="text-blue-900">📄 Documentos del Procedimiento</CardTitle>
+            <CardDescription>
+              Documentos judiciales y administrativos de cada fase del proceso
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <div className="space-y-4">
+              {[4, 5, 6, 7, 8, 9, 10].map((fase) => {
+                const docsFase = documentos.filter(d => d.fase === fase || (fase === faseActual && d.fase === undefined))
+                const documentosEsperados = documentosPorFase[fase] || []
+                const isFaseActual = fase === faseActual
+                
+                // Solo mostrar fases que tienen documentos o son la fase actual
+                if (docsFase.length === 0 && !isFaseActual) return null
+                
+                return (
+                  <div key={fase} className={`p-4 rounded-lg border ${isFaseActual ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'}`}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Badge className={isFaseActual ? 'bg-blue-600' : 'bg-gray-500'}>
+                        Fase {fase}
+                      </Badge>
+                      <h4 className="font-medium text-gray-900">
+                        {nombresFases[fase]}
+                      </h4>
+                    </div>
+                    
+                    {docsFase.length > 0 ? (
+                      <div className="space-y-2">
+                        {docsFase.map((doc) => (
+                          <div key={doc.id} className="flex items-center justify-between p-2 bg-white rounded border">
+                            <div className="flex items-center gap-2">
+                              <FileText className="w-4 h-4 text-red-500" />
+                              <div>
+                                <p className="text-sm font-medium">{doc.nombre}</p>
+                                <p className="text-xs text-gray-500">
+                                  {doc.nombreArchivo} • {formatDate(doc.fechaSubida)}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex gap-1">
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => handleView(doc)}
+                              >
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => handleDownload(doc)}
+                              >
+                                <Download className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500 italic">
+                        Aún no hay documentos subidos para esta fase
+                      </p>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </CardContent>
         </Card>

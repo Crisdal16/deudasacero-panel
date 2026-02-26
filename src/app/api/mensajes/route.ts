@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { sendNewMessageEmail } from '@/lib/email'
 
 // GET - Listar mensajes del expediente con nombre del remitente
 export async function GET(request: NextRequest) {
@@ -114,11 +115,16 @@ export async function POST(request: NextRequest) {
     }
 
     let expId = expedienteId
+    let expediente: any = null
 
     // Cliente envía a su expediente
     if (user.rol === 'cliente') {
-      const expediente = await prisma.expediente.findUnique({
+      expediente = await prisma.expediente.findUnique({
         where: { clienteId: user.userId },
+        include: {
+          cliente: { select: { nombre: true, email: true } },
+          abogadoAsignado: { select: { nombre: true, email: true } },
+        },
       })
       if (!expediente) {
         return NextResponse.json(
@@ -131,8 +137,12 @@ export async function POST(request: NextRequest) {
 
     // Abogado envía a expediente asignado
     if (user.rol === 'abogado' && expedienteId) {
-      const expediente = await prisma.expediente.findUnique({
+      expediente = await prisma.expediente.findUnique({
         where: { id: expedienteId },
+        include: {
+          cliente: { select: { nombre: true, email: true } },
+          abogadoAsignado: { select: { nombre: true, email: true } },
+        },
       })
       if (!expediente || expediente.abogadoAsignadoId !== user.userId) {
         return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
@@ -141,10 +151,17 @@ export async function POST(request: NextRequest) {
 
     // Admin puede enviar a cualquier expediente
     if (user.rol === 'admin' && expedienteId) {
+      expediente = await prisma.expediente.findUnique({
+        where: { id: expedienteId },
+        include: {
+          cliente: { select: { nombre: true, email: true } },
+          abogadoAsignado: { select: { nombre: true, email: true } },
+        },
+      })
       expId = expedienteId
     }
 
-    if (!expId) {
+    if (!expId || !expediente) {
       return NextResponse.json(
         { error: 'Expediente no especificado' },
         { status: 400 }
@@ -173,9 +190,54 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // Si hay adjunto, guardarlo en MensajeDirecto (reutilizando la estructura)
-    // O podríamos extender el modelo Mensaje para soportar adjuntos
-    // Por ahora, guardamos el adjunto en una tabla separada si es necesario
+    // Guardar adjunto si existe (en MensajeDirecto o actualizar el mensaje)
+    // Por ahora devolvemos el adjunto en la respuesta para que el frontend lo maneje
+    // En una implementación completa, se guardaría en una tabla de adjuntos
+
+    // Enviar email de notificación al destinatario correspondiente
+    try {
+      const remitenteNombre = user.nombre
+      
+      if (user.rol === 'cliente') {
+        // Notificar al abogado asignado si existe, si no al admin
+        if (expediente.abogadoAsignado?.email) {
+          await sendNewMessageEmail(
+            expediente.abogadoAsignado.email,
+            expediente.abogadoAsignado.nombre,
+            remitenteNombre,
+            texto.trim(),
+            expediente.referencia
+          )
+        }
+        // También notificar a la administración (admin principal)
+        // Podríamos tener un email de admin en las variables de entorno
+      } else if (user.rol === 'abogado') {
+        // Notificar al cliente
+        if (expediente.cliente?.email) {
+          await sendNewMessageEmail(
+            expediente.cliente.email,
+            expediente.cliente.nombre,
+            remitenteNombre,
+            texto.trim(),
+            expediente.referencia
+          )
+        }
+      } else if (user.rol === 'admin') {
+        // Notificar al cliente
+        if (expediente.cliente?.email) {
+          await sendNewMessageEmail(
+            expediente.cliente.email,
+            expediente.cliente.nombre,
+            'Administración',
+            texto.trim(),
+            expediente.referencia
+          )
+        }
+      }
+    } catch (emailError) {
+      console.error('Error enviando notificación de mensaje:', emailError)
+      // No fallar el envío del mensaje si el email falla
+    }
 
     return NextResponse.json({ 
       success: true, 

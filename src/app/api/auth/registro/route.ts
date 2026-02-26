@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { registerUser, createSession } from '@/lib/auth'
+import { sendWelcomeEmail, sendVerificationEmail } from '@/lib/email'
+import { randomBytes } from 'crypto'
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,7 +22,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const user = await registerUser({ nombre, email, password, telefono, nif })
+    // Generar token de verificación
+    const tokenVerificacion = randomBytes(32).toString('hex')
+    const tokenVerificacionExpira = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 horas
+
+    const user = await registerUser({ 
+      nombre, 
+      email, 
+      password, 
+      telefono, 
+      nif,
+      tokenVerificacion,
+      tokenVerificacionExpira
+    })
 
     if (!user) {
       return NextResponse.json(
@@ -30,6 +44,22 @@ export async function POST(request: NextRequest) {
     }
 
     await createSession(user)
+
+    // Enviar email de bienvenida
+    try {
+      await sendWelcomeEmail(email, nombre)
+    } catch (emailError) {
+      console.error('Error enviando email de bienvenida:', emailError)
+      // No fallar el registro si el email falla
+    }
+
+    // Enviar email de verificación
+    try {
+      await sendVerificationEmail(email, nombre, tokenVerificacion)
+    } catch (emailError) {
+      console.error('Error enviando email de verificación:', emailError)
+      // No fallar el registro si el email falla
+    }
 
     return NextResponse.json({
       success: true,

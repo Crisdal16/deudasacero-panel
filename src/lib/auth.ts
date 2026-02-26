@@ -111,6 +111,8 @@ export async function registerUser(data: {
   password: string
   telefono?: string
   nif?: string
+  tokenVerificacion?: string
+  tokenVerificacionExpira?: Date
 }): Promise<UserPayload | null> {
   const existingUser = await prisma.usuario.findUnique({
     where: { email: data.email },
@@ -130,6 +132,8 @@ export async function registerUser(data: {
       telefono: data.telefono,
       nif: data.nif,
       rol: 'cliente',
+      tokenVerificacion: data.tokenVerificacion,
+      tokenVerificacionExpira: data.tokenVerificacionExpira,
     },
   })
 
