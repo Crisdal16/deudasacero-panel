@@ -366,6 +366,7 @@ model MensajeDirecto {
   id              String    @id @default(cuid())
   conversacionId  String
   remitenteId     String
+  destinatarioId  String?
   texto           String    @db.Text
   leido           Boolean   @default(false)
   fechaEnvio      DateTime  @default(now())
@@ -379,9 +380,11 @@ model MensajeDirecto {
 
   conversacion Conversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
   remitente    Usuario      @relation("MensajesEnviados", fields: [remitenteId], references: [id], onDelete: Cascade)
+  destinatario Usuario?     @relation("MensajesRecibidos", fields: [destinatarioId], references: [id], onDelete: SetNull)
 
   @@index([conversacionId])
   @@index([remitenteId])
+  @@index([destinatarioId])
   @@index([fechaEnvio])
 }
 
