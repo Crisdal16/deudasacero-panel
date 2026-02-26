@@ -1,0 +1,303 @@
+// =============================================
+// Deudas a Cero - Schema Prisma (PostgreSQL)
+// FASE 1: Sistema de roles con abogados externos
+// =============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================
+// USUARIOS Y ROLES
+// =============================================
+
+model Usuario {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  password     String
+  nombre       String
+  telefono     String?
+  nif          String?
+  rol          String   @default("cliente") // admin, abogado, cliente
+  activo       Boolean  @default(true)
+  ultimoAcceso DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relaciones
+  expedientesComoCliente  Expediente[]  @relation("ClienteExpedientes")
+  expedientesComoAbogado  Expediente[]  @relation("AbogadoExpedientes")
+  mensajes                Mensaje[]
+  acciones                AuditLog[]
+  firmas                  Firma[]
+  documentosSubidos       Documento[]
+
+  @@index([email])
+  @@index([rol])
+  @@index([activo])
+}
+
+// =============================================
+// EXPEDIENTES
+// =============================================
+
+model Expediente {
+  id                 String    @id @default(cuid())
+  referencia         String    @unique
+  juzgado            String?
+  tipoProcedimiento  String    @default("persona_fisica") // persona_fisica, autonomo
+  faseActual         Int       @default(1) // 1-10
+  porcentajeAvance   Int       @default(0)
+  fechaPresentacion  DateTime?
+  fechaInicio        DateTime  @default(now())
+  fechaCierre        DateTime?
+  notasInternas      String?   @db.Text
+  notasPublicas      String?   @db.Text
+  
+  // Datos del cliente para LSO
+  situacionLaboral   String?
+  buenaFe            Boolean   @default(false)
+  sinAntecedentes    Boolean   @default(false)
+  estadoCivil        String?
+  hijos              Int       @default(0)
+  
+  // Estado del expediente
+  estado             String    @default("activo") // activo, pausado, cerrado, cancelado
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relaciones
+  clienteId           String
+  cliente             Usuario    @relation("ClienteExpedientes", fields: [clienteId], references: [id], onDelete: Cascade)
+  
+  abogadoAsignadoId   String?
+  abogadoAsignado     Usuario?   @relation("AbogadoExpedientes", fields: [abogadoAsignadoId], references: [id], onDelete: SetNull)
+  
+  deudas              Deuda[]
+  documentos          Documento[]
+  documentosJudiciales DocumentoJudicial[]
+  mensajes            Mensaje[]
+  facturacion         Facturacion?
+  firmas              Firma[]
+  checklist           ChecklistDocumento[]
+  
+  @@index([referencia])
+  @@index([faseActual])
+  @@index([estado])
+  @@index([clienteId])
+  @@index([abogadoAsignadoId])
+}
+
+// =============================================
+// DEUDAS Y ACTIVOS
+// =============================================
+
+model Deuda {
+  id             String   @id @default(cuid())
+  expedienteId   String
+  tipo           String   // financiera, publica, proveedores, hipoteca, otros
+  importe        Float
+  descripcion    String?  @db.Text
+  acreedor       String?
+  cuenta         String?
+  referencia     String?
+  
+  createdAt DateTime @default(now())
+
+  expediente Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+
+  @@index([expedienteId])
+  @@index([tipo])
+}
+
+// =============================================
+// DOCUMENTOS
+// =============================================
+
+model Documento {
+  id             String    @id @default(cuid())
+  expedienteId   String
+  nombre         String
+  tipo           String    // DNI, IRPF, auto, nomina, certificado, otro
+  ruta           String?
+  contenido      String?   @db.Text
+  estado         String    @default("pendiente") // pendiente, subido, revisado, incorrecto, no_aplica
+  esRequerido    Boolean   @default(false)
+  esJudicial     Boolean   @default(false)
+  fechaSubida    DateTime?
+  subidoPorId    String?
+  notas          String?
+  
+  createdAt DateTime @default(now())
+
+  expediente Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+  subidoPor  Usuario?   @relation(fields: [subidoPorId], references: [id], onDelete: SetNull)
+
+  @@index([expedienteId])
+  @@index([tipo])
+  @@index([estado])
+}
+
+model DocumentoJudicial {
+  id             String    @id @default(cuid())
+  expedienteId   String
+  nombre         String
+  tipo           String    // auto, sentencia, providencia, requerimiento, otro
+  ruta           String?
+  contenido      String?   @db.Text
+  resumenIA      String?   @db.Text
+  fechaDocumento DateTime?
+  fechaSubida    DateTime  @default(now())
+  
+  expediente Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+
+  @@index([expedienteId])
+  @@index([tipo])
+}
+
+// =============================================
+// CHECKLIST DE DOCUMENTOS
+// =============================================
+
+model ChecklistDocumento {
+  id             String   @id @default(cuid())
+  expedienteId   String
+  nombre         String
+  obligatorio    Boolean  @default(true)
+  noAplica       Boolean  @default(false)
+  orden          Int      @default(0)
+  documentoId    String?
+  
+  expediente Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+
+  @@index([expedienteId])
+}
+
+// =============================================
+// MENSAJES
+// =============================================
+
+model Mensaje {
+  id             String    @id @default(cuid())
+  expedienteId   String
+  usuarioId      String
+  remitente      String    // cliente, abogado, admin
+  texto          String    @db.Text
+  leido          Boolean   @default(false)
+  fechaEnvio     DateTime  @default(now())
+  
+  expediente Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+  usuario    Usuario    @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([expedienteId])
+  @@index([usuarioId])
+  @@index([fechaEnvio])
+}
+
+// =============================================
+// FACTURACIÓN
+// =============================================
+
+model Facturacion {
+  id                    String   @id @default(cuid())
+  expedienteId          String   @unique
+  importePresupuestado  Float
+  importeFacturado      Float    @default(0)
+  estado                String   @default("pendiente") // pendiente, parcial, pagado, moroso
+  metodoPago            String?  // transferencia, tarjeta, efectivo
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  expediente Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+  pagos      Pago[]
+
+  @@index([expedienteId])
+  @@index([estado])
+}
+
+model Pago {
+  id              String    @id @default(cuid())
+  facturacionId   String
+  concepto        String
+  importe         Float
+  fechaPago       DateTime?
+  fechaVencimiento DateTime?
+  estado          String    @default("pendiente") // pendiente, pagado, vencido
+  metodoPago      String?
+  referencia      String?
+  notas           String?
+  
+  createdAt DateTime @default(now())
+
+  facturacion Facturacion @relation(fields: [facturacionId], references: [id], onDelete: Cascade)
+
+  @@index([facturacionId])
+  @@index([estado])
+}
+
+// =============================================
+// FIRMAS ELECTRÓNICAS
+// =============================================
+
+model Firma {
+  id              String    @id @default(cuid())
+  expedienteId    String
+  usuarioId       String
+  tipo            String    // manuscrita, sms_otp, certificado
+  documento       String    // nombre del documento firmado
+  documentoPath   String?   // ruta del PDF firmado
+  datosFirma      String?   @db.Text // JSON con datos de la firma
+  ip              String?
+  verificado      Boolean   @default(false)
+  fechaFirma      DateTime  @default(now())
+  
+  expediente Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+  usuario    Usuario    @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([expedienteId])
+  @@index([usuarioId])
+}
+
+// =============================================
+// AUDIT LOG
+// =============================================
+
+model AuditLog {
+  id           String    @id @default(cuid())
+  usuarioId    String
+  expedienteId String?
+  accion       String    // login, logout, crear_expediente, cambiar_fase, subir_documento, etc.
+  descripcion  String    @db.Text
+  ip           String?
+  userAgent    String?
+  datos        String?   @db.Text // JSON con datos adicionales
+  createdAt    DateTime  @default(now())
+
+  usuario    Usuario    @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@index([expedienteId])
+  @@index([accion])
+  @@index([createdAt])
+}
+
+// =============================================
+// FAQ
+// =============================================
+
+model FAQ {
+  id        String @id @default(cuid())
+  pregunta  String @db.Text
+  respuesta String @db.Text
+  orden     Int    @default(0)
+  activo    Boolean @default(true)
+
+  @@index([orden])
+}
