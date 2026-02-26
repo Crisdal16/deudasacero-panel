@@ -6,10 +6,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Textarea } from '@/components/ui/textarea'
 import {
   Table,
   TableBody,
@@ -18,13 +16,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 import { 
   FileText, 
@@ -35,13 +26,9 @@ import {
   Eye,
   RefreshCw,
   ArrowLeft,
-  Upload,
-  Download,
   Send,
-  Paperclip,
   CheckCircle2,
   AlertCircle,
-  X,
   Loader2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -82,8 +69,6 @@ interface Expediente {
     remitenteNombre?: string
     fechaEnvio: string
     leido: boolean
-    archivoNombre?: string | null
-    archivoContenido?: string | null
   }>
   deudaTotal: number
   documentosPendientes: number
@@ -680,16 +665,6 @@ export function AbogadoPanel() {
                               : "bg-gray-100 text-gray-900 rounded-2xl rounded-bl-sm"
                           )}>
                             <p className="text-sm">{msg.texto}</p>
-                            
-                            {msg.archivoContenido && (
-                              <div className={cn(
-                                "mt-2 p-2 rounded flex items-center gap-2",
-                                isOwn ? "bg-blue-700" : "bg-gray-200"
-                              )}>
-                                <Paperclip className="w-4 h-4" />
-                                <span className="text-sm flex-1 truncate">{msg.archivoNombre}</span>
-                              </div>
-                            )}
                             
                             <div className={cn(
                               "flex items-center justify-end gap-1 mt-1",
