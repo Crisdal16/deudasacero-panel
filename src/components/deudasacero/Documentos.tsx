@@ -518,7 +518,6 @@ export function Documentos({
               onDrop={handleDrop}
             >
               <input
-                            {/* Input file oculto - Fixed */}
                 ref={fileInputRef}
                 type="file"
                 className="hidden"
