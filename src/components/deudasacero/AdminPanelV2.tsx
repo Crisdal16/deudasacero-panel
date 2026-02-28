@@ -169,6 +169,8 @@ export function AdminPanelV2() {
   const [facturasPendientes, setFacturasPendientes] = useState<Factura[]>([])
   const [todasFacturas, setTodasFacturas] = useState<Factura[]>([])
   const [metodoPagoConfirmacion, setMetodoPagoConfirmacion] = useState<string>('transferencia')
+  const [showConfirmarPagoDialog, setShowConfirmarPagoDialog] = useState(false)
+  const [facturaAPagar, setFacturaAPagar] = useState<Factura | null>(null)
   const { toast } = useToast()
 
   // Formulario nuevo abogado
@@ -549,11 +551,20 @@ export function AdminPanelV2() {
     }
   }
 
-  // Confirmar pago de factura
-  const handleConfirmarPago = async (facturaId: string, numero: string) => {
+  // Confirmar pago de factura - abre diálogo
+  const openConfirmarPagoDialog = (factura: Factura) => {
+    setFacturaAPagar(factura)
+    setMetodoPagoConfirmacion('transferencia')
+    setShowConfirmarPagoDialog(true)
+  }
+
+  // Ejecutar confirmación de pago
+  const handleConfirmarPago = async () => {
+    if (!facturaAPagar) return
+    
     setSaving(true)
     try {
-      const res = await fetch(`/api/facturas/${facturaId}`, {
+      const res = await fetch(`/api/facturas/${facturaAPagar.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -569,8 +580,10 @@ export function AdminPanelV2() {
       
       toast({
         title: 'Pago confirmado',
-        description: `La factura ${numero} ha sido marcada como pagada`,
+        description: `La factura ${facturaAPagar.numero} ha sido marcada como pagada`,
       })
+      setShowConfirmarPagoDialog(false)
+      setFacturaAPagar(null)
       fetchData()
     } catch (error: any) {
       toast({
@@ -1016,36 +1029,36 @@ export function AdminPanelV2() {
                         <TableCell>{formatDate(factura.fechaEmision)}</TableCell>
                         <TableCell>{getEstadoFacturaBadge(factura.estado)}</TableCell>
                         <TableCell>
-                          <div className="flex gap-1">
+                          <div className="flex gap-2 flex-wrap">
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => handleDownloadFactura(factura.id, factura.numero)}
                               title="Descargar factura"
                             >
-                              <Download className="w-4 h-4" />
+                              <Download className="w-4 h-4 mr-1" />
+                              Descargar
                             </Button>
                             {factura.estado === 'emitida' && (
                               <>
                                 <Button
-                                  variant="outline"
                                   size="sm"
-                                  onClick={() => handleConfirmarPago(factura.id, factura.numero)}
-                                  className="bg-green-50 hover:bg-green-100 text-green-700"
-                                  title="Confirmar pago"
+                                  onClick={() => openConfirmarPagoDialog(factura)}
+                                  className="bg-green-600 hover:bg-green-700 text-white"
                                   disabled={saving}
                                 >
-                                  <CheckCircle className="w-4 h-4" />
+                                  <CheckCircle className="w-4 h-4 mr-1" />
+                                  Confirmar Pago
                                 </Button>
                                 <Button
                                   variant="outline"
                                   size="sm"
                                   onClick={() => handleAnularFactura(factura.id, factura.numero)}
-                                  className="bg-red-50 hover:bg-red-100 text-red-700"
-                                  title="Anular factura"
+                                  className="border-red-300 text-red-600 hover:bg-red-50"
                                   disabled={saving}
                                 >
-                                  <Trash2 className="w-4 h-4" />
+                                  <Trash2 className="w-4 h-4 mr-1" />
+                                  Anular
                                 </Button>
                               </>
                             )}
@@ -1570,6 +1583,72 @@ export function AdminPanelV2() {
                   </>
                 ) : (
                   'Crear Cliente'
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Confirmar Pago */}
+      <Dialog open={showConfirmarPagoDialog} onOpenChange={setShowConfirmarPagoDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar Pago de Factura</DialogTitle>
+            <DialogDescription>
+              {facturaAPagar && (
+                <span>
+                  Factura <strong>{facturaAPagar.numero}</strong> - {formatCurrency(facturaAPagar.importe)}
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+              <p className="text-sm text-green-800">
+                Al confirmar el pago, se marcará la factura como <strong>pagada</strong> y 
+                se actualizará el historial de pagos del cliente.
+              </p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="metodo-pago">Método de Pago</Label>
+              <Select
+                value={metodoPagoConfirmacion}
+                onValueChange={setMetodoPagoConfirmacion}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar método" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="transferencia">Transferencia Bancaria</SelectItem>
+                  <SelectItem value="tarjeta">Tarjeta</SelectItem>
+                  <SelectItem value="efectivo">Efectivo</SelectItem>
+                  <SelectItem value="bizum">Bizum</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="flex gap-2 justify-end pt-4">
+              <Button variant="outline" onClick={() => setShowConfirmarPagoDialog(false)}>
+                Cancelar
+              </Button>
+              <Button
+                className="bg-green-600 hover:bg-green-700"
+                onClick={handleConfirmarPago}
+                disabled={saving}
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Confirmando...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Confirmar Pago
+                  </>
                 )}
               </Button>
             </div>
