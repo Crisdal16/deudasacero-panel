@@ -501,9 +501,11 @@ export function Documentos({
                 onChange={handleFileInput}
                 accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx"
                 tabIndex={-1}
-              />* Modal de subida con drag and drop */}
+        />
+              
+              {/* Modal de subida con drrag and drop */}
       <Dialog open={showUpload} onOpenChange={setShowUpload}>
-        <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Subir nuevo documento</DialogTitle>
             <DialogDescription>
