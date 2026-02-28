@@ -70,6 +70,12 @@ interface Expediente {
     nif: string | null
     telefono: string | null
   }
+  usuario?: {
+    nombre: string
+    email: string
+    nif: string | null
+    telefono: string | null
+  }
   deudas: Array<{
     id: string
     tipo: string

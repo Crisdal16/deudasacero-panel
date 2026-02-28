@@ -13,9 +13,12 @@ export async function GET() {
 
     // Cliente ve su propio expediente
     if (user.rol === 'cliente') {
-      const expediente = await prisma.expediente.findUnique({
+      const expediente = await prisma.expediente.findFirst({
         where: { clienteId: user.userId },
         include: {
+          cliente: {
+            select: { id: true, nombre: true, email: true, nif: true, telefono: true }
+          },
           deudas: true,
           documentos: {
             where: { esJudicial: false },
@@ -52,6 +55,8 @@ export async function GET() {
       return NextResponse.json({
         expediente: {
           ...expediente,
+          usuario: expediente.cliente, // Mapear cliente a usuario para el frontend
+          abogadoAsignadoObj: expediente.abogadoAsignado, // Mapear para el frontend
           deudaTotal,
           deudaPublica,
           deudaFinanciera,

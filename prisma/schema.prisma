@@ -1,5 +1,5 @@
 // =============================================
-// Deudas a Cero - Schema Prisma (PostgreSQL)
+// Deudas a Cero - Schema Prisma (SQLite)
 // FASE 1: Sistema de roles con abogados externos
 // =============================================
 
@@ -8,7 +8,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -80,8 +80,8 @@ model Expediente {
   fechaPresentacion  DateTime?
   fechaInicio        DateTime  @default(now())
   fechaCierre        DateTime?
-  notasInternas      String?   @db.Text
-  notasPublicas      String?   @db.Text
+  notasInternas      String?   
+  notasPublicas      String?   
   
   // Datos del cliente para LSO
   situacionLaboral   String?
@@ -128,7 +128,7 @@ model Deuda {
   expedienteId   String
   tipo           String   // financiera, publica, proveedores, hipoteca, otros
   importe        Float
-  descripcion    String?  @db.Text
+  descripcion    String?  
   acreedor       String?
   cuenta         String?
   referencia     String?
@@ -151,7 +151,7 @@ model Documento {
   nombre         String
   tipo           String    // DNI, IRPF, auto, nomina, certificado, otro
   ruta           String?
-  contenido      String?   @db.Text
+  contenido      String?   
   nombreArchivo  String?   // Nombre original del archivo
   estado         String    @default("pendiente") // pendiente, subido, revisado, incorrecto, no_aplica
   esRequerido    Boolean   @default(false)
@@ -178,8 +178,8 @@ model DocumentoJudicial {
   nombre         String
   tipo           String    // auto, sentencia, providencia, requerimiento, otro
   ruta           String?
-  contenido      String?   @db.Text
-  resumenIA      String?   @db.Text
+  contenido      String?   
+  resumenIA      String?   
   fechaDocumento DateTime?
   fechaSubida    DateTime  @default(now())
   
@@ -217,13 +217,13 @@ model Mensaje {
   usuarioId      String
   remitente      String    // cliente, abogado, admin
   destinatario   String?   // cliente, abogado, admin - a quién va dirigido
-  texto          String    @db.Text
+  texto          String    
   leido          Boolean   @default(false)
   fechaEnvio     DateTime  @default(now())
   
   // Archivo adjunto
   archivoNombre    String?
-  archivoContenido String?   @db.Text
+  archivoContenido String?   
   archivoTipo      String?
   
   expediente Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
@@ -288,7 +288,7 @@ model Firma {
   tipo            String    // manuscrita, sms_otp, certificado
   documento       String    // nombre del documento firmado
   documentoPath   String?   // ruta del PDF firmado
-  datosFirma      String?   @db.Text // JSON con datos de la firma
+  datosFirma      String?    // JSON con datos de la firma
   ip              String?
   verificado      Boolean   @default(false)
   fechaFirma      DateTime  @default(now())
@@ -309,10 +309,10 @@ model AuditLog {
   usuarioId    String
   expedienteId String?
   accion       String    // login, logout, crear_expediente, cambiar_fase, subir_documento, etc.
-  descripcion  String    @db.Text
+  descripcion  String    
   ip           String?
   userAgent    String?
-  datos        String?   @db.Text // JSON con datos adicionales
+  datos        String?    // JSON con datos adicionales
   createdAt    DateTime  @default(now())
 
   usuario    Usuario    @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
@@ -329,8 +329,8 @@ model AuditLog {
 
 model FAQ {
   id        String @id @default(cuid())
-  pregunta  String @db.Text
-  respuesta String @db.Text
+  pregunta  String 
+  respuesta String 
   orden     Int    @default(0)
   activo    Boolean @default(true)
 
@@ -376,13 +376,13 @@ model MensajeDirecto {
   conversacionId  String
   remitenteId     String
   destinatarioId  String?
-  texto           String    @db.Text
+  texto           String    
   leido           Boolean   @default(false)
   fechaEnvio      DateTime  @default(now())
   
   // Adjunto
   archivoNombre   String?
-  archivoContenido String?  @db.Text
+  archivoContenido String?  
   archivoTipo     String?
   
   createdAt DateTime @default(now())
@@ -411,7 +411,7 @@ model Factura {
   estado         String    @default("emitida") // emitida, pagada, vencida, anulada
   importe        Float
   concepto       String
-  contenido      String?   @db.Text  // PDF en base64
+  contenido      String?     // PDF en base64
   notas          String?
   
   createdAt DateTime @default(now())
