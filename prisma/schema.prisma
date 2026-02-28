@@ -1,5 +1,5 @@
 // =============================================
-// Deudas a Cero - Schema Prisma (SQLite)
+// Deudas a Cero - Schema Prisma (PostgreSQL)
 // FASE 1: Sistema de roles con abogados externos
 // =============================================
 
@@ -8,7 +8,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
