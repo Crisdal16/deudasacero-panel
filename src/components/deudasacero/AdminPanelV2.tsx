@@ -56,7 +56,9 @@ import {
   CheckCircle,
   AlertCircle,
   Trash2,
-  XCircle
+  XCircle,
+  X,
+  Upload
 } from 'lucide-react'
 import { TimelineSelector, fasesLSO } from './Timeline'
 import { cn } from '@/lib/utils'
@@ -172,6 +174,14 @@ export function AdminPanelV2() {
   const [metodoPagoConfirmacion, setMetodoPagoConfirmacion] = useState<string>('transferencia')
   const [showConfirmarPagoDialog, setShowConfirmarPagoDialog] = useState(false)
   const [facturaAPagar, setFacturaAPagar] = useState<Factura | null>(null)
+  
+  // Estados para subir presupuesto
+  const [showPresupuestoDialog, setShowPresupuestoDialog] = useState(false)
+  const [selectedPresupuestoFile, setSelectedPresupuestoFile] = useState<File | null>(null)
+  const [uploadingPresupuesto, setUploadingPresupuesto] = useState(false)
+  const [dragPresupuestoActive, setDragPresupuestoActive] = useState(false)
+  const presupuestoFileInputRef = useRef<HTMLInputElement>(null)
+  
   const { toast } = useToast()
 
   // Formulario nuevo abogado
@@ -691,6 +701,114 @@ export function AdminPanelV2() {
     }
   }
 
+  // Funciones para subir presupuesto
+  const openPresupuestoDialog = (exp: Expediente) => {
+    setSelectedExpediente(exp)
+    setSelectedPresupuestoFile(null)
+    setShowPresupuestoDialog(true)
+  }
+
+  const handlePresupuestoDrag = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragPresupuestoActive(true)
+    } else if (e.type === 'dragleave') {
+      setDragPresupuestoActive(false)
+    }
+  }, [])
+
+  const handlePresupuestoDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragPresupuestoActive(false)
+    
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handlePresupuestoFile(e.dataTransfer.files[0])
+    }
+  }, [])
+
+  const handlePresupuestoFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      handlePresupuestoFile(e.target.files[0])
+    }
+  }
+
+  const handlePresupuestoFile = (file: File) => {
+    if (!file.type.includes('pdf')) {
+      toast({
+        title: 'Error',
+        description: 'Solo se aceptan archivos PDF.',
+        variant: 'destructive',
+      })
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast({
+        title: 'Error',
+        description: 'El archivo es demasiado grande. Máximo 10MB.',
+        variant: 'destructive',
+      })
+      return
+    }
+    setSelectedPresupuestoFile(file)
+  }
+
+  const convertToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.readAsDataURL(file)
+      reader.onload = () => {
+        const result = reader.result as string
+        const base64 = result.split(',')[1]
+        resolve(base64)
+      }
+      reader.onerror = (error) => reject(error)
+    })
+  }
+
+  const handleUploadPresupuesto = async () => {
+    if (!selectedPresupuestoFile || !selectedExpediente) return
+    
+    setUploadingPresupuesto(true)
+    try {
+      const contenido = await convertToBase64(selectedPresupuestoFile)
+      
+      const res = await fetch('/api/presupuesto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre: 'Hoja de Encargo y Presupuesto',
+          contenido,
+          nombreArchivo: selectedPresupuestoFile.name,
+          expedienteId: selectedExpediente.id,
+        }),
+      })
+      
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Error al subir presupuesto')
+      }
+      
+      toast({
+        title: 'Presupuesto subido',
+        description: `El presupuesto se ha subido al expediente ${selectedExpediente.referencia}`,
+      })
+      
+      setShowPresupuestoDialog(false)
+      setSelectedPresupuestoFile(null)
+      fetchData()
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'No se pudo subir el presupuesto',
+        variant: 'destructive',
+      })
+    } finally {
+      setUploadingPresupuesto(false)
+    }
+  }
+
   // Obtener badge de estado de factura
   const getEstadoFacturaBadge = (estado: string) => {
     switch (estado) {
@@ -875,7 +993,19 @@ export function AdminPanelV2() {
                           )}
                         </TableCell>
                         <TableCell>
-                          <div className="flex gap-1">
+                          <div className="flex gap-1 flex-wrap">
+                            {/* Botón de presupuesto - solo en fase 2 */}
+                            {exp.faseActual === 2 && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openPresupuestoDialog(exp)}
+                                className="bg-orange-50 hover:bg-orange-100 border-orange-200"
+                                title="Subir presupuesto"
+                              >
+                                <FileText className="w-4 h-4 text-orange-600" />
+                              </Button>
+                            )}
                             <Button
                               variant="outline"
                               size="sm"
@@ -1776,6 +1906,118 @@ export function AdminPanelV2() {
                   <>
                     <CheckCircle className="w-4 h-4 mr-2" />
                     Confirmar Pago
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Subir Presupuesto */}
+      <Dialog open={showPresupuestoDialog} onOpenChange={setShowPresupuestoDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Subir Presupuesto y Hoja de Encargo</DialogTitle>
+            <DialogDescription>
+              {selectedExpediente && (
+                <span>
+                  Expediente: <strong>{selectedExpediente.referencia}</strong> - {selectedExpediente.cliente.nombre}
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {/* Drop zone */}
+            <div
+              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                dragPresupuestoActive 
+                  ? 'border-blue-500 bg-blue-50' 
+                  : selectedPresupuestoFile
+                    ? 'border-green-500 bg-green-50'
+                    : 'border-gray-300 hover:border-gray-400'
+              }`}
+              onDragEnter={handlePresupuestoDrag}
+              onDragLeave={handlePresupuestoDrag}
+              onDragOver={handlePresupuestoDrag}
+              onDrop={handlePresupuestoDrop}
+            >
+              <input
+                ref={presupuestoFileInputRef}
+                type="file"
+                className="hidden"
+                onChange={handlePresupuestoFileInput}
+                accept=".pdf"
+              />
+              
+              {selectedPresupuestoFile ? (
+                <div className="space-y-3">
+                  <FileText className="w-12 h-12 mx-auto text-red-500" />
+                  <div>
+                    <p className="font-medium text-gray-900">{selectedPresupuestoFile.name}</p>
+                    <p className="text-sm text-gray-500">
+                      {(selectedPresupuestoFile.size / 1024).toFixed(1)} KB
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectedPresupuestoFile(null)}
+                  >
+                    <X className="w-4 h-4 mr-1" />
+                    Cambiar archivo
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <Upload className="w-12 h-12 mx-auto text-gray-400" />
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      Arrastra un archivo PDF aquí
+                    </p>
+                    <p className="text-sm text-gray-500">o</p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="mt-2"
+                      onClick={() => presupuestoFileInputRef.current?.click()}
+                    >
+                      Seleccionar archivo
+                    </Button>
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    Solo archivos PDF (máx. 10MB)
+                  </p>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex gap-2 justify-end pt-4">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setShowPresupuestoDialog(false)
+                  setSelectedPresupuestoFile(null)
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                className="bg-green-600 hover:bg-green-700"
+                onClick={handleUploadPresupuesto}
+                disabled={!selectedPresupuestoFile || uploadingPresupuesto}
+              >
+                {uploadingPresupuesto ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Subiendo...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4 mr-2" />
+                    Subir Presupuesto
                   </>
                 )}
               </Button>
