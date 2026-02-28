@@ -369,7 +369,13 @@ export default function Home() {
     const res = await fetch('/api/mensajes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ texto, ...archivo, destinatario }),
+      body: JSON.stringify({ 
+        texto, 
+        archivoNombre: archivo?.nombre,
+        archivoContenido: archivo?.contenido,
+        archivoTipo: archivo?.tipo,
+        destinatario 
+      }),
     })
     if (!res.ok) throw new Error('Error al enviar mensaje')
     fetchMensajes()
