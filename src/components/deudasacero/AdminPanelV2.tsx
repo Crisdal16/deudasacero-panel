@@ -8,6 +8,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Table,
   TableBody,
@@ -30,6 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { 
   Users, 
@@ -42,9 +45,16 @@ import {
   UserPlus,
   RefreshCw,
   ArrowRight,
-  Loader2
+  Loader2,
+  Send,
+  Building2,
+  CreditCard,
+  Receipt,
+  Plus,
+  Eye
 } from 'lucide-react'
 import { TimelineSelector, fasesLSO } from './Timeline'
+import { cn } from '@/lib/utils'
 
 interface Expediente {
   id: string
@@ -65,8 +75,14 @@ interface Expediente {
     email: string
   } | null
   deudaTotal: number
-  documentosPendientes: number
+  pagosPendientes: number
   mensajesNuevos: number
+  facturacion?: {
+    id: string
+    importePresupuestado: number
+    importeFacturado: number
+    estado: string
+  } | null
   notasInternas?: string | null
 }
 
@@ -95,6 +111,38 @@ interface Cliente {
   }
 }
 
+interface Mensaje {
+  id: string
+  texto: string
+  remitente: string
+  remitenteNombre?: string
+  fechaEnvio: string
+  leido: boolean
+  destinatario?: string | null
+  archivoNombre?: string | null
+  archivoContenido?: string | null
+  archivoTipo?: string | null
+}
+
+interface Factura {
+  id: string
+  numero: string
+  importe: number
+  concepto: string
+  estado: string
+  fechaEmision: string
+  fechaVencimiento?: string | null
+  usuarioId: string
+  expedienteId?: string | null
+  usuario?: {
+    nombre: string
+    email: string
+  }
+  expediente?: {
+    referencia: string
+  }
+}
+
 export function AdminPanelV2() {
   const [expedientes, setExpedientes] = useState<Expediente[]>([])
   const [abogados, setAbogados] = useState<Abogado[]>([])
@@ -105,8 +153,16 @@ export function AdminPanelV2() {
   const [showAbogadoDialog, setShowAbogadoDialog] = useState(false)
   const [showClienteDialog, setShowClienteDialog] = useState(false)
   const [showFaseDialog, setShowFaseDialog] = useState(false)
+  const [showMensajesDialog, setShowMensajesDialog] = useState(false)
+  const [showFacturacionDialog, setShowFacturacionDialog] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [activeTab, setActiveTab] = useState<'expedientes' | 'clientes' | 'abogados'>('expedientes')
+  const [activeTab, setActiveTab] = useState<'expedientes' | 'clientes' | 'abogados' | 'mensajes'>('expedientes')
+  const [mensajes, setMensajes] = useState<Mensaje[]>([])
+  const [nuevoMensaje, setNuevoMensaje] = useState('')
+  const [enviandoMensaje, setEnviandoMensaje] = useState(false)
+  const [destinatarioMensaje, setDestinatarioMensaje] = useState<'cliente' | 'abogado'>('cliente')
+  const [totalPagosPendientes, setTotalPagosPendientes] = useState(0)
+  const [facturasPendientes, setFacturasPendientes] = useState<Factura[]>([])
   const { toast } = useToast()
 
   // Formulario nuevo abogado
@@ -129,20 +185,36 @@ export function AdminPanelV2() {
     tipoProcedimiento: 'persona_fisica',
   })
 
+  // Formulario factura
+  const [nuevaFactura, setNuevaFactura] = useState({
+    numero: '',
+    importe: '',
+    concepto: '',
+    fechaVencimiento: '',
+  })
+
   const fetchData = async () => {
     setLoading(true)
     try {
-      const [expRes, abogRes, clientRes] = await Promise.all([
+      const [expRes, abogRes, clientRes, pagosRes] = await Promise.all([
         fetch('/api/expedientes'),
         fetch('/api/admin/abogados'),
         fetch('/api/admin/usuarios?rol=cliente'),
+        fetch('/api/admin/pagos-pendientes'),
       ])
       const expData = await expRes.json()
       const abogData = await abogRes.json()
       const clientData = await clientRes.json()
+      const pagosData = await pagosRes.json()
+      
       setExpedientes(expData.expedientes || [])
       setAbogados(abogData.abogados || [])
       setClientes(clientData.usuarios || [])
+      
+      if (pagosData.resumen) {
+        setTotalPagosPendientes(pagosData.resumen.totalFacturasPendientes || 0)
+        setFacturasPendientes(pagosData.facturasPendientes || [])
+      }
     } catch (error) {
       console.error('Error fetching data:', error)
       toast({
@@ -172,7 +244,7 @@ export function AdminPanelV2() {
   const stats = {
     totalExpedientes: expedientes.length,
     totalClientes: clientes.length,
-    pendientesDocumentos: expedientes.filter(e => e.documentosPendientes > 0).length,
+    pagosPendientes: totalPagosPendientes,
     mensajesNuevos: expedientes.reduce((sum, e) => sum + e.mensajesNuevos, 0),
     deudaTotal: expedientes.reduce((sum, e) => sum + e.deudaTotal, 0),
     sinAsignar: expedientes.filter(e => !e.abogadoAsignado).length,
@@ -321,6 +393,118 @@ export function AdminPanelV2() {
     }
   }
 
+  const openMensajesDialog = async (exp: Expediente) => {
+    setSelectedExpediente(exp)
+    setShowMensajesDialog(true)
+    // Cargar mensajes
+    try {
+      const res = await fetch(`/api/mensajes?expedienteId=${exp.id}`)
+      const data = await res.json()
+      setMensajes(data.mensajes || [])
+    } catch (error) {
+      console.error('Error cargando mensajes:', error)
+    }
+  }
+
+  const handleEnviarMensaje = async () => {
+    if (!nuevoMensaje.trim() || !selectedExpediente) return
+
+    setEnviandoMensaje(true)
+    try {
+      const res = await fetch('/api/mensajes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          texto: nuevoMensaje.trim(),
+          expedienteId: selectedExpediente.id,
+          destinatario: destinatarioMensaje,
+        }),
+      })
+      
+      if (!res.ok) throw new Error('Error al enviar mensaje')
+      
+      setNuevoMensaje('')
+      // Recargar mensajes
+      const msgRes = await fetch(`/api/mensajes?expedienteId=${selectedExpediente.id}`)
+      const msgData = await msgRes.json()
+      setMensajes(msgData.mensajes || [])
+      
+      toast({
+        title: 'Mensaje enviado',
+        description: `El mensaje ha sido enviado a ${destinatarioMensaje === 'abogado' ? 'el abogado' : 'el cliente'}`,
+      })
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'No se pudo enviar el mensaje',
+        variant: 'destructive',
+      })
+    } finally {
+      setEnviandoMensaje(false)
+    }
+  }
+
+  const openFacturacionDialog = (exp: Expediente) => {
+    setSelectedExpediente(exp)
+    // Generar número de factura automático
+    const year = new Date().getFullYear()
+    const num = Math.floor(Math.random() * 10000).toString().padStart(4, '0')
+    setNuevaFactura({
+      numero: `F${year}-${num}`,
+      importe: '',
+      concepto: `Servicios LSO - ${exp.referencia}`,
+      fechaVencimiento: '',
+    })
+    setShowFacturacionDialog(true)
+  }
+
+  const handleCrearFactura = async () => {
+    if (!nuevaFactura.numero || !nuevaFactura.importe || !nuevaFactura.concepto) {
+      toast({
+        title: 'Error',
+        description: 'Todos los campos son obligatorios',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setSaving(true)
+    try {
+      const res = await fetch('/api/facturas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          usuarioId: selectedExpediente?.cliente.id,
+          expedienteId: selectedExpediente?.id,
+          numero: nuevaFactura.numero,
+          importe: parseFloat(nuevaFactura.importe),
+          concepto: nuevaFactura.concepto,
+          fechaVencimiento: nuevaFactura.fechaVencimiento || null,
+        }),
+      })
+      
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Error al crear factura')
+      }
+      
+      toast({
+        title: 'Factura creada',
+        description: `La factura ${nuevaFactura.numero} ha sido creada correctamente`,
+      })
+      setShowFacturacionDialog(false)
+      fetchData()
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'No se pudo crear la factura',
+        variant: 'destructive',
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const openFaseDialog = (exp: Expediente) => {
     setSelectedExpediente(exp)
     setShowFaseDialog(true)
@@ -331,7 +515,7 @@ export function AdminPanelV2() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-blue-900">Panel de Administración</h1>
-          <p className="text-gray-600">Gestiona expedientes, clientes y abogados</p>
+          <p className="text-gray-600">Gestiona expedientes, clientes, abogados y facturación</p>
         </div>
         <Button onClick={fetchData} variant="outline" disabled={loading}>
           <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
@@ -380,12 +564,12 @@ export function AdminPanelV2() {
         <Card className="border-yellow-100">
           <CardHeader className="pb-2">
             <CardDescription className="flex items-center gap-2">
-              <FileText className="w-4 h-4" />
-              Docs Pendientes
+              <Euro className="w-4 h-4" />
+              Pagos Pendientes
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-yellow-600">{stats.pendientesDocumentos}</p>
+            <p className="text-xl font-bold text-yellow-600">{formatCurrency(stats.pagosPendientes)}</p>
           </CardContent>
         </Card>
 
@@ -404,7 +588,7 @@ export function AdminPanelV2() {
         <Card className="border-red-100">
           <CardHeader className="pb-2">
             <CardDescription className="flex items-center gap-2">
-              <Euro className="w-4 h-4" />
+              <CreditCard className="w-4 h-4" />
               Deuda Total
             </CardDescription>
           </CardHeader>
@@ -415,248 +599,311 @@ export function AdminPanelV2() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b">
-        <button
-          className={`px-4 py-2 font-medium ${activeTab === 'expedientes' ? 'text-blue-900 border-b-2 border-blue-900' : 'text-gray-500'}`}
-          onClick={() => setActiveTab('expedientes')}
-        >
-          Expedientes
-        </button>
-        <button
-          className={`px-4 py-2 font-medium ${activeTab === 'clientes' ? 'text-blue-900 border-b-2 border-blue-900' : 'text-gray-500'}`}
-          onClick={() => setActiveTab('clientes')}
-        >
-          Clientes
-        </button>
-        <button
-          className={`px-4 py-2 font-medium ${activeTab === 'abogados' ? 'text-blue-900 border-b-2 border-blue-900' : 'text-gray-500'}`}
-          onClick={() => setActiveTab('abogados')}
-        >
-          Abogados
-        </button>
-      </div>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="expedientes">Expedientes</TabsTrigger>
+          <TabsTrigger value="clientes">Clientes</TabsTrigger>
+          <TabsTrigger value="abogados">Abogados</TabsTrigger>
+          <TabsTrigger value="mensajes">Mensajes</TabsTrigger>
+        </TabsList>
 
-      {/* Contenido: Expedientes */}
-      {activeTab === 'expedientes' && (
-        <Card className="border-blue-100">
-          <CardHeader>
-            <CardTitle className="text-blue-900">Expedientes Activos</CardTitle>
-            <CardDescription>
-              Gestiona todos los expedientes y actualiza el progreso
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="text-center py-8 text-gray-500">Cargando...</div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Referencia</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Fase</TableHead>
-                    <TableHead>Progreso</TableHead>
-                    <TableHead>Deuda</TableHead>
-                    <TableHead>Abogado</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead>Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {expedientes.map((exp) => (
-                    <TableRow key={exp.id}>
-                      <TableCell className="font-medium">{exp.referencia}</TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{exp.cliente.nombre}</p>
-                          <p className="text-sm text-gray-500">{exp.cliente.email}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="bg-blue-50 text-blue-700">
-                          {exp.faseActual}/10 - {fasesLSO[exp.faseActual - 1]?.nombre?.split(' ')[0]}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="w-24">
-                          <Progress value={exp.porcentajeAvance} className="h-2" />
-                          <p className="text-xs text-gray-500 mt-1">{exp.porcentajeAvance}%</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>{formatCurrency(exp.deudaTotal)}</TableCell>
-                      <TableCell>
-                        {exp.abogadoAsignado ? (
-                          <span className="text-sm">{exp.abogadoAsignado.nombre}</span>
-                        ) : (
-                          <Badge variant="outline" className="bg-orange-50 text-orange-700">
-                            Sin asignar
+        {/* Contenido: Expedientes */}
+        <TabsContent value="expedientes">
+          <Card className="border-blue-100">
+            <CardHeader>
+              <CardTitle className="text-blue-900">Expedientes Activos</CardTitle>
+              <CardDescription>
+                Gestiona todos los expedientes y actualiza el progreso
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="text-center py-8 text-gray-500">Cargando...</div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Referencia</TableHead>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Fase</TableHead>
+                      <TableHead>Progreso</TableHead>
+                      <TableHead>Deuda</TableHead>
+                      <TableHead>Pagos Pendientes</TableHead>
+                      <TableHead>Abogado</TableHead>
+                      <TableHead>Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {expedientes.map((exp) => (
+                      <TableRow key={exp.id}>
+                        <TableCell className="font-medium">{exp.referencia}</TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{exp.cliente.nombre}</p>
+                            <p className="text-sm text-gray-500">{exp.cliente.email}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="bg-blue-50 text-blue-700">
+                            {exp.faseActual}/10 - {fasesLSO[exp.faseActual - 1]?.nombre?.split(' ')[0]}
                           </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-1">
-                          {exp.documentosPendientes > 0 && (
-                            <Badge variant="outline" className="bg-yellow-50 text-yellow-700">
-                              {exp.documentosPendientes} docs
+                        </TableCell>
+                        <TableCell>
+                          <div className="w-24">
+                            <Progress value={exp.porcentajeAvance} className="h-2" />
+                            <p className="text-xs text-gray-500 mt-1">{exp.porcentajeAvance}%</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>{formatCurrency(exp.deudaTotal)}</TableCell>
+                        <TableCell>
+                          {exp.facturacion ? (
+                            <div className="text-sm">
+                              <p className="font-medium text-yellow-600">
+                                {formatCurrency(exp.facturacion.importePresupuestado - exp.facturacion.importeFacturado)}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                de {formatCurrency(exp.facturacion.importePresupuestado)}
+                              </p>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {exp.abogadoAsignado ? (
+                            <span className="text-sm">{exp.abogadoAsignado.nombre}</span>
+                          ) : (
+                            <Badge variant="outline" className="bg-orange-50 text-orange-700">
+                              Sin asignar
                             </Badge>
                           )}
-                          {exp.mensajesNuevos > 0 && (
-                            <Badge variant="outline" className="bg-green-50 text-green-700">
-                              {exp.mensajesNuevos} msgs
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-1">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openFaseDialog(exp)}
-                            className="bg-blue-50 hover:bg-blue-100"
-                          >
-                            <TrendingUp className="w-4 h-4 mr-1" />
-                            Fase
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedExpediente(exp)
-                              setShowAsignarDialog(true)
-                            }}
-                          >
-                            <Edit className="w-4 h-4 mr-1" />
-                            Asignar
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
-      )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openFaseDialog(exp)}
+                              className="bg-blue-50 hover:bg-blue-100"
+                              title="Cambiar fase"
+                            >
+                              <TrendingUp className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedExpediente(exp)
+                                setShowAsignarDialog(true)
+                              }}
+                              title="Asignar abogado"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openMensajesDialog(exp)}
+                              className="bg-purple-50 hover:bg-purple-100"
+                              title="Mensajes"
+                            >
+                              <MessageSquare className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openFacturacionDialog(exp)}
+                              className="bg-green-50 hover:bg-green-100"
+                              title="Facturación"
+                            >
+                              <Receipt className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-      {/* Contenido: Clientes */}
-      {activeTab === 'clientes' && (
-        <Card className="border-blue-100">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle className="text-blue-900">Clientes</CardTitle>
-              <CardDescription>Gestiona los clientes del sistema</CardDescription>
-            </div>
-            <Button onClick={() => setShowClienteDialog(true)} className="bg-green-600 hover:bg-green-700">
-              <UserPlus className="w-4 h-4 mr-2" />
-              Nuevo Cliente
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="text-center py-8 text-gray-500">Cargando...</div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nombre</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Teléfono</TableHead>
-                    <TableHead>NIF</TableHead>
-                    <TableHead>Expedientes</TableHead>
-                    <TableHead>Último Acceso</TableHead>
-                    <TableHead>Estado</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {clientes.map((cliente) => (
-                    <TableRow key={cliente.id}>
-                      <TableCell className="font-medium">{cliente.nombre}</TableCell>
-                      <TableCell>{cliente.email}</TableCell>
-                      <TableCell>{cliente.telefono || '-'}</TableCell>
-                      <TableCell>{cliente.nif || '-'}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
-                          {cliente._count.expedientesComoCliente} expedientes
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {cliente.ultimoAcceso ? formatDate(cliente.ultimoAcceso) : 'Nunca'}
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={cliente.activo ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
-                          {cliente.activo ? 'Activo' : 'Inactivo'}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Contenido: Abogados */}
-      {activeTab === 'abogados' && (
-        <Card className="border-blue-100">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle className="text-blue-900">Abogados Externos</CardTitle>
-              <CardDescription>Gestiona los abogados que colaboran contigo</CardDescription>
-            </div>
-            <Button onClick={() => setShowAbogadoDialog(true)} className="bg-blue-900 hover:bg-blue-800">
-              <UserPlus className="w-4 h-4 mr-2" />
-              Nuevo Abogado
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="text-center py-8 text-gray-500">Cargando...</div>
-            ) : abogados.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <Users className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                <p>No hay abogados registrados</p>
-                <Button onClick={() => setShowAbogadoDialog(true)} className="mt-4">
-                  Añadir primer abogado
-                </Button>
+        {/* Contenido: Clientes */}
+        <TabsContent value="clientes">
+          <Card className="border-blue-100">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-blue-900">Clientes</CardTitle>
+                <CardDescription>Gestiona los clientes del sistema</CardDescription>
               </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nombre</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Teléfono</TableHead>
-                    <TableHead>Expedientes Asignados</TableHead>
-                    <TableHead>Estado</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {abogados.map((abog) => (
-                    <TableRow key={abog.id}>
-                      <TableCell className="font-medium">{abog.nombre}</TableCell>
-                      <TableCell>{abog.email}</TableCell>
-                      <TableCell>{abog.telefono || '-'}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
-                          {abog._count.expedientesComoAbogado} expedientes
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={abog.activo ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
-                          {abog.activo ? 'Activo' : 'Inactivo'}
-                        </Badge>
-                      </TableCell>
+              <Button onClick={() => setShowClienteDialog(true)} className="bg-green-600 hover:bg-green-700">
+                <UserPlus className="w-4 h-4 mr-2" />
+                Nuevo Cliente
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="text-center py-8 text-gray-500">Cargando...</div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nombre</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Teléfono</TableHead>
+                      <TableHead>NIF</TableHead>
+                      <TableHead>Expedientes</TableHead>
+                      <TableHead>Último Acceso</TableHead>
+                      <TableHead>Estado</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
-      )}
+                  </TableHeader>
+                  <TableBody>
+                    {clientes.map((cliente) => (
+                      <TableRow key={cliente.id}>
+                        <TableCell className="font-medium">{cliente.nombre}</TableCell>
+                        <TableCell>{cliente.email}</TableCell>
+                        <TableCell>{cliente.telefono || '-'}</TableCell>
+                        <TableCell>{cliente.nif || '-'}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {cliente._count.expedientesComoCliente} expedientes
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {cliente.ultimoAcceso ? formatDate(cliente.ultimoAcceso) : 'Nunca'}
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={cliente.activo ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
+                            {cliente.activo ? 'Activo' : 'Inactivo'}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Contenido: Abogados */}
+        <TabsContent value="abogados">
+          <Card className="border-blue-100">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-blue-900">Abogados Externos</CardTitle>
+                <CardDescription>Gestiona los abogados que colaboran contigo</CardDescription>
+              </div>
+              <Button onClick={() => setShowAbogadoDialog(true)} className="bg-blue-900 hover:bg-blue-800">
+                <UserPlus className="w-4 h-4 mr-2" />
+                Nuevo Abogado
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="text-center py-8 text-gray-500">Cargando...</div>
+              ) : abogados.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <Users className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                  <p>No hay abogados registrados</p>
+                  <Button onClick={() => setShowAbogadoDialog(true)} className="mt-4">
+                    Añadir primer abogado
+                  </Button>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nombre</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Teléfono</TableHead>
+                      <TableHead>Expedientes Asignados</TableHead>
+                      <TableHead>Estado</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {abogados.map((abog) => (
+                      <TableRow key={abog.id}>
+                        <TableCell className="font-medium">{abog.nombre}</TableCell>
+                        <TableCell>{abog.email}</TableCell>
+                        <TableCell>{abog.telefono || '-'}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {abog._count.expedientesComoAbogado} expedientes
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={abog.activo ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
+                            {abog.activo ? 'Activo' : 'Inactivo'}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Contenido: Mensajes */}
+        <TabsContent value="mensajes">
+          <Card className="border-blue-100">
+            <CardHeader>
+              <CardTitle className="text-blue-900">Mensajes por Expediente</CardTitle>
+              <CardDescription>
+                Selecciona un expediente para enviar mensajes al cliente o abogado
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="text-center py-8 text-gray-500">Cargando...</div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Expediente</TableHead>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Abogado</TableHead>
+                      <TableHead>Mensajes Nuevos</TableHead>
+                      <TableHead>Acción</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {expedientes.map((exp) => (
+                      <TableRow key={exp.id}>
+                        <TableCell className="font-medium">{exp.referencia}</TableCell>
+                        <TableCell>{exp.cliente.nombre}</TableCell>
+                        <TableCell>{exp.abogadoAsignado?.nombre || '-'}</TableCell>
+                        <TableCell>
+                          {exp.mensajesNuevos > 0 ? (
+                            <Badge className="bg-purple-100 text-purple-800">
+                              {exp.mensajesNuevos} nuevos
+                            </Badge>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openMensajesDialog(exp)}
+                          >
+                            <MessageSquare className="w-4 h-4 mr-1" />
+                            Ver Chat
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Dialog: Cambiar Fase */}
       <Dialog open={showFaseDialog} onOpenChange={setShowFaseDialog}>
@@ -741,6 +988,185 @@ export function AdminPanelV2() {
         </DialogContent>
       </Dialog>
 
+      {/* Dialog: Mensajes */}
+      <Dialog open={showMensajesDialog} onOpenChange={setShowMensajesDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>Mensajes - {selectedExpediente?.referencia}</DialogTitle>
+            <DialogDescription>
+              Cliente: {selectedExpediente?.cliente.nombre}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex flex-col h-[400px]">
+            <ScrollArea className="flex-1 pr-4">
+              <div className="space-y-3">
+                {mensajes.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <MessageSquare className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                    <p>No hay mensajes</p>
+                  </div>
+                ) : (
+                  mensajes.map((msg) => {
+                    const isOwn = msg.remitente === 'admin'
+                    return (
+                      <div 
+                        key={msg.id}
+                        className={cn("flex gap-3", isOwn ? "justify-end" : "justify-start")}
+                      >
+                        {!isOwn && (
+                          <Avatar className={cn("w-8 h-8", msg.remitente === 'abogado' ? 'bg-blue-600' : 'bg-green-600')}>
+                            <AvatarFallback className={cn(msg.remitente === 'abogado' ? 'bg-blue-600' : 'bg-green-600', "text-white")}>
+                              {msg.remitente === 'abogado' ? 'A' : 'C'}
+                            </AvatarFallback>
+                          </Avatar>
+                        )}
+                        
+                        <div className={cn(
+                          "max-w-[70%] p-3",
+                          isOwn 
+                            ? "bg-purple-600 text-white rounded-2xl rounded-br-sm" 
+                            : "bg-gray-100 text-gray-900 rounded-2xl rounded-bl-sm"
+                        )}>
+                          <p className="text-sm">{msg.texto}</p>
+                          <p className="text-xs mt-1 opacity-70">
+                            {new Date(msg.fechaEnvio).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                        
+                        {isOwn && (
+                          <Avatar className="w-8 h-8 bg-purple-600">
+                            <AvatarFallback className="bg-purple-600 text-white">
+                              <Building2 className="w-4 h-4" />
+                            </AvatarFallback>
+                          </Avatar>
+                        )}
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            </ScrollArea>
+            
+            <form onSubmit={(e) => { e.preventDefault(); handleEnviarMensaje(); }} className="border-t pt-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600">Enviar a:</span>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={destinatarioMensaje === 'cliente' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setDestinatarioMensaje('cliente')}
+                    className={destinatarioMensaje === 'cliente' ? 'bg-blue-900 hover:bg-blue-800' : ''}
+                  >
+                    Cliente
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={destinatarioMensaje === 'abogado' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setDestinatarioMensaje('abogado')}
+                    className={destinatarioMensaje === 'abogado' ? 'bg-blue-900 hover:bg-blue-800' : ''}
+                  >
+                    Abogado
+                  </Button>
+                </div>
+              </div>
+              
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Escribe tu mensaje..."
+                  value={nuevoMensaje}
+                  onChange={(e) => setNuevoMensaje(e.target.value)}
+                  disabled={enviandoMensaje}
+                  className="flex-1"
+                />
+                <Button 
+                  type="submit" 
+                  className="bg-purple-600 hover:bg-purple-700" 
+                  disabled={enviandoMensaje || !nuevoMensaje.trim()}
+                >
+                  {enviandoMensaje ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Crear Factura */}
+      <Dialog open={showFacturacionDialog} onOpenChange={setShowFacturacionDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Crear Factura</DialogTitle>
+            <DialogDescription>
+              Expediente: {selectedExpediente?.referencia} - Cliente: {selectedExpediente?.cliente.nombre}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="fact-numero">Número de Factura *</Label>
+              <Input
+                id="fact-numero"
+                value={nuevaFactura.numero}
+                onChange={(e) => setNuevaFactura({ ...nuevaFactura, numero: e.target.value })}
+                placeholder="F2024-0001"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="fact-importe">Importe (€) *</Label>
+              <Input
+                id="fact-importe"
+                type="number"
+                step="0.01"
+                value={nuevaFactura.importe}
+                onChange={(e) => setNuevaFactura({ ...nuevaFactura, importe: e.target.value })}
+                placeholder="1500.00"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="fact-concepto">Concepto *</Label>
+              <Input
+                id="fact-concepto"
+                value={nuevaFactura.concepto}
+                onChange={(e) => setNuevaFactura({ ...nuevaFactura, concepto: e.target.value })}
+                placeholder="Servicios LSO"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="fact-vencimiento">Fecha de Vencimiento</Label>
+              <Input
+                id="fact-vencimiento"
+                type="date"
+                value={nuevaFactura.fechaVencimiento}
+                onChange={(e) => setNuevaFactura({ ...nuevaFactura, fechaVencimiento: e.target.value })}
+              />
+            </div>
+            
+            <div className="flex gap-2 justify-end pt-4">
+              <Button variant="outline" onClick={() => setShowFacturacionDialog(false)}>
+                Cancelar
+              </Button>
+              <Button
+                className="bg-green-600 hover:bg-green-700"
+                onClick={handleCrearFactura}
+                disabled={saving}
+              >
+                {saving ? 'Creando...' : 'Crear Factura'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Dialog: Crear abogado */}
       <Dialog open={showAbogadoDialog} onOpenChange={setShowAbogadoDialog}>
         <DialogContent>
@@ -772,7 +1198,7 @@ export function AdminPanelV2() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="abog-telefono">Teléfono</Label>
+              <Label htmlFor="abog-telefono">Télefono</Label>
               <Input
                 id="abog-telefono"
                 value={nuevoAbogado.telefono}
@@ -869,7 +1295,6 @@ export function AdminPanelV2() {
               </div>
             </div>
 
-            {/* Opción de crear expediente */}
             <div className="border-t pt-4 mt-4">
               <div className="flex items-center space-x-2 mb-3">
                 <Checkbox

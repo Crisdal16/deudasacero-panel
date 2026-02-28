@@ -42,7 +42,14 @@ export async function GET(request: NextRequest) {
           mensajes: {
             where: { leido: false, remitente: 'cliente' },
           },
-          facturacion: true,
+          facturacion: {
+            select: {
+              id: true,
+              importePresupuestado: true,
+              importeFacturado: true,
+              estado: true,
+            }
+          },
         },
         orderBy: { createdAt: 'desc' },
       })
@@ -52,6 +59,9 @@ export async function GET(request: NextRequest) {
         deudaTotal: exp.deudas.reduce((sum, d) => sum + d.importe, 0),
         documentosPendientes: exp.documentos.filter((d) => d.estado === 'pendiente').length,
         mensajesNuevos: exp.mensajes.length,
+        pagosPendientes: exp.facturacion 
+          ? (exp.facturacion.importePresupuestado - exp.facturacion.importeFacturado)
+          : 0,
       }))
 
       return NextResponse.json({ expedientes: expedientesConInfo })
