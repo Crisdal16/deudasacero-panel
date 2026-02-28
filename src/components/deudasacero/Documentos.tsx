@@ -503,13 +503,12 @@ export function Documentos({
           </DialogHeader>
           
           <form onSubmit={handleUpload} className="space-y-4">
-            {/* Input file - FUERA del drop zone para evitar conflictos */}
+            {/* SOLUCIÓN ROBUSTA: Input file con label */}
             <input
               ref={fileInputRef}
               type="file"
-              id="file-upload"
-              name="file-upload"
-              className="hidden"
+              id="file-upload-input"
+              style={{ display: 'none' }}
               onChange={handleFileInput}
               accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx"
             />
