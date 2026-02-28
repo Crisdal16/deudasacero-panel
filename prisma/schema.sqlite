@@ -1,0 +1,324 @@
+// =============================================
+// Deudas a Cero - Schema Prisma (SQLite local)
+// FASE 1: Sistema de roles con abogados externos
+// =============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================
+// USUARIOS Y ROLES
+// =============================================
+
+model Usuario {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  password     String
+  nombre       String
+  apellidos    String?
+  telefono     String?
+  nif          String?
+  rol          String   @default("cliente")
+  activo       Boolean  @default(true)
+  ultimoAcceso DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  direccion       String?
+  codigoPostal    String?
+  ciudad          String?
+  provincia       String?
+  nombreFacturacion  String?
+  nifFacturacion     String?
+  direccionFacturacion String?
+  numeroColegiado  String?
+  emailVerificado  Boolean @default(false)
+  tokenVerificacion String?
+  tokenVerificacionExpira DateTime?
+  expedientesComoCliente  Expediente[]  @relation("ClienteExpedientes")
+  expedientesComoAbogado  Expediente[]  @relation("AbogadoExpedientes")
+  mensajes                Mensaje[]
+  mensajesEnviados        MensajeDirecto[]  @relation("MensajesEnviados")
+  mensajesRecibidos       MensajeDirecto[]  @relation("MensajesRecibidos")
+  conversaciones          ConversacionParticipante[]
+  acciones                AuditLog[]
+  firmas                  Firma[]
+  documentosSubidos       Documento[]
+  facturas                Factura[]
+  @@index([email])
+  @@index([rol])
+  @@index([activo])
+}
+
+model Expediente {
+  id                 String    @id @default(cuid())
+  referencia         String    @unique
+  juzgado            String?
+  tipoProcedimiento  String    @default("persona_fisica")
+  faseActual         Int       @default(1)
+  porcentajeAvance   Int       @default(0)
+  fechaPresentacion  DateTime?
+  fechaInicio        DateTime  @default(now())
+  fechaCierre        DateTime?
+  notasInternas      String?   
+  notasPublicas      String?   
+  situacionLaboral   String?
+  buenaFe            Boolean   @default(false)
+  sinAntecedentes    Boolean   @default(false)
+  estadoCivil        String?
+  hijos              Int       @default(0)
+  estado             String    @default("activo")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  clienteId           String
+  cliente             Usuario    @relation("ClienteExpedientes", fields: [clienteId], references: [id], onDelete: Cascade)
+  abogadoAsignadoId   String?
+  abogadoAsignado     Usuario?   @relation("AbogadoExpedientes", fields: [abogadoAsignadoId], references: [id], onDelete: SetNull)
+  deudas              Deuda[]
+  documentos          Documento[]
+  documentosJudiciales DocumentoJudicial[]
+  mensajes            Mensaje[]
+  facturacion         Facturacion?
+  firmas              Firma[]
+  checklist           ChecklistDocumento[]
+  facturas            Factura[]
+  @@index([referencia])
+  @@index([faseActual])
+  @@index([estado])
+  @@index([clienteId])
+  @@index([abogadoAsignadoId])
+}
+
+model Deuda {
+  id             String   @id @default(cuid())
+  expedienteId   String
+  tipo           String
+  importe        Float
+  descripcion    String?  
+  acreedor       String?
+  cuenta         String?
+  referencia     String?
+  createdAt DateTime @default(now())
+  expediente Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+  @@index([expedienteId])
+  @@index([tipo])
+}
+
+model Documento {
+  id             String    @id @default(cuid())
+  expedienteId   String
+  nombre         String
+  tipo           String
+  ruta           String?
+  contenido      String?   
+  nombreArchivo  String?
+  estado         String    @default("pendiente")
+  esRequerido    Boolean   @default(false)
+  esJudicial     Boolean   @default(false)
+  fase           Int?
+  fechaSubida    DateTime?
+  subidoPorId    String?
+  notas          String?
+  createdAt DateTime @default(now())
+  expediente Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+  subidoPor  Usuario?   @relation(fields: [subidoPorId], references: [id], onDelete: SetNull)
+  @@index([expedienteId])
+  @@index([tipo])
+  @@index([estado])
+  @@index([fase])
+}
+
+model DocumentoJudicial {
+  id             String    @id @default(cuid())
+  expedienteId   String
+  nombre         String
+  tipo           String
+  ruta           String?
+  contenido      String?   
+  resumenIA      String?   
+  fechaDocumento DateTime?
+  fechaSubida    DateTime  @default(now())
+  expediente Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+  @@index([expedienteId])
+  @@index([tipo])
+}
+
+model ChecklistDocumento {
+  id             String   @id @default(cuid())
+  expedienteId   String
+  nombre         String
+  obligatorio    Boolean  @default(true)
+  noAplica       Boolean  @default(false)
+  orden          Int      @default(0)
+  documentoId    String?
+  expediente Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+  @@index([expedienteId])
+}
+
+model Mensaje {
+  id             String    @id @default(cuid())
+  expedienteId   String
+  usuarioId      String
+  remitente      String
+  destinatario   String?
+  texto          String    
+  leido          Boolean   @default(false)
+  fechaEnvio     DateTime  @default(now())
+  archivoNombre    String?
+  archivoContenido String?   
+  archivoTipo      String?
+  expediente Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+  usuario    Usuario    @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  @@index([expedienteId])
+  @@index([usuarioId])
+  @@index([fechaEnvio])
+  @@index([destinatario])
+}
+
+model Facturacion {
+  id                    String   @id @default(cuid())
+  expedienteId          String   @unique
+  importePresupuestado  Float
+  importeFacturado      Float    @default(0)
+  estado                String   @default("pendiente")
+  metodoPago            String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  expediente Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+  pagos      Pago[]
+  @@index([expedienteId])
+  @@index([estado])
+}
+
+model Pago {
+  id              String    @id @default(cuid())
+  facturacionId   String
+  concepto        String
+  importe         Float
+  fechaPago       DateTime?
+  fechaVencimiento DateTime?
+  estado          String    @default("pendiente")
+  metodoPago      String?
+  referencia      String?
+  notas           String?
+  createdAt DateTime @default(now())
+  facturacion Facturacion @relation(fields: [facturacionId], references: [id], onDelete: Cascade)
+  @@index([facturacionId])
+  @@index([estado])
+}
+
+model Firma {
+  id              String    @id @default(cuid())
+  expedienteId    String
+  usuarioId       String
+  tipo            String
+  documento       String
+  documentoPath   String?
+  datosFirma      String?
+  ip              String?
+  verificado      Boolean   @default(false)
+  fechaFirma      DateTime  @default(now())
+  expediente Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+  usuario    Usuario    @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  @@index([expedienteId])
+  @@index([usuarioId])
+}
+
+model AuditLog {
+  id           String    @id @default(cuid())
+  usuarioId    String
+  expedienteId String?
+  accion       String
+  descripcion  String    
+  ip           String?
+  userAgent    String?
+  datos        String?
+  createdAt    DateTime  @default(now())
+  usuario    Usuario    @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  @@index([usuarioId])
+  @@index([expedienteId])
+  @@index([accion])
+  @@index([createdAt])
+}
+
+model FAQ {
+  id        String @id @default(cuid())
+  pregunta  String 
+  respuesta String 
+  orden     Int    @default(0)
+  activo    Boolean @default(true)
+  @@index([orden])
+}
+
+model Conversacion {
+  id          String   @id @default(cuid())
+  tipo        String   @default("directo")
+  asunto      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  participantes  ConversacionParticipante[]
+  mensajes       MensajeDirecto[]
+  @@index([updatedAt])
+}
+
+model ConversacionParticipante {
+  id              String   @id @default(cuid())
+  conversacionId  String
+  usuarioId       String
+  ultimoLeido     DateTime?
+  notificaciones  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  conversacion Conversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+  usuario      Usuario      @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  @@unique([conversacionId, usuarioId])
+  @@index([conversacionId])
+  @@index([usuarioId])
+}
+
+model MensajeDirecto {
+  id              String    @id @default(cuid())
+  conversacionId  String
+  remitenteId     String
+  destinatarioId  String?
+  texto           String    
+  leido           Boolean   @default(false)
+  fechaEnvio      DateTime  @default(now())
+  archivoNombre   String?
+  archivoContenido String?  
+  archivoTipo     String?
+  createdAt DateTime @default(now())
+  conversacion Conversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+  remitente    Usuario      @relation("MensajesEnviados", fields: [remitenteId], references: [id], onDelete: Cascade)
+  destinatario Usuario?     @relation("MensajesRecibidos", fields: [destinatarioId], references: [id], onDelete: SetNull)
+  @@index([conversacionId])
+  @@index([remitenteId])
+  @@index([destinatarioId])
+  @@index([fechaEnvio])
+}
+
+model Factura {
+  id             String    @id @default(cuid())
+  usuarioId      String
+  expedienteId   String?
+  numero         String
+  fechaEmision   DateTime  @default(now())
+  fechaVencimiento DateTime?
+  estado         String    @default("emitida")
+  importe        Float
+  concepto       String
+  contenido      String?
+  notas          String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  usuario    Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  expediente Expediente? @relation(fields: [expedienteId], references: [id], onDelete: SetNull)
+  @@unique([numero])
+  @@index([usuarioId])
+  @@index([estado])
+  @@index([fechaEmision])
+}

@@ -7,10 +7,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "db:push": "prisma db push",
-    "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:reset": "prisma migrate reset"
+    "db:push": "prisma db push --schema=./prisma/schema.sqlite",
+    "db:generate": "prisma generate --schema=./prisma/schema.sqlite",
+    "db:migrate": "prisma migrate dev --schema=./prisma/schema.sqlite",
+    "db:reset": "prisma migrate reset --schema=./prisma/schema.sqlite",
+    "db:seed": "bunx prisma db seed --schema=./prisma/schema.sqlite"
+  },
+  "prisma": {
+    "seed": "bunx tsx prisma/seed.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
