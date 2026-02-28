@@ -4,9 +4,6 @@ const nextConfig: NextConfig = {
   // Modo estricto de React desactivado para evitar warnings en producción
   reactStrictMode: false,
   
-  // Output standalone para producción
-  output: "standalone",
-  
   // Ignorar errores de TypeScript durante build (temporal)
   typescript: {
     ignoreBuildErrors: true,
