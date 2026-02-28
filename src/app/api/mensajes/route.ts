@@ -19,12 +19,11 @@ export async function GET(request: NextRequest) {
 
     // Cliente solo ve mensajes de su expediente
     if (user.rol === 'cliente') {
-      const expediente = await prisma.expediente.findUnique({
+      const expediente = await prisma.expediente.findFirst({
         where: { clienteId: user.userId },
       })
       if (!expediente) {
-        return NextResponse.json({ mensajes: [] })
-      }
+      return NextResponse.json({ mensajes: [] })      }
       expId = expediente.id
     }
 
@@ -137,7 +136,7 @@ export async function POST(request: NextRequest) {
 
     // Cliente envía a su expediente
     if (user.rol === 'cliente') {
-      expediente = await prisma.expediente.findUnique({
+      expediente = await prisma.expediente.findFirst({
         where: { clienteId: user.userId },
         include: {
           cliente: { select: { id: true, nombre: true, email: true } },
