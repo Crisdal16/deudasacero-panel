@@ -218,6 +218,11 @@ export async function DELETE(
       return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 })
     }
 
+    console.log(`[ANULAR] Anulando factura ${factura.numero} (ID: ${factura.id}), importe: ${factura.importe}`)
+
+    let pagoEliminado = false
+    let facturacionActualizada = false
+
     // Si la factura tiene expediente, eliminar el pago pendiente asociado y actualizar facturación
     if (factura.expedienteId) {
       const facturacion = await prisma.facturacion.findUnique({
@@ -225,7 +230,10 @@ export async function DELETE(
       })
 
       if (facturacion) {
+        console.log(`[ANULAR] Buscando pago pendiente para facturacionId: ${facturacion.id}, numero factura: ${factura.numero}`)
+
         // Buscar y eliminar el pago pendiente asociado a esta factura
+        // Buscar por concepto que contenga el número de factura
         const pagoPendiente = await prisma.pago.findFirst({
           where: {
             facturacionId: facturacion.id,
@@ -235,15 +243,19 @@ export async function DELETE(
         })
 
         if (pagoPendiente) {
+          console.log(`[ANULAR] Eliminando pago pendiente ID: ${pagoPendiente.id}, concepto: ${pagoPendiente.concepto}`)
           await prisma.pago.delete({
             where: { id: pagoPendiente.id }
           })
+          pagoEliminado = true
+        } else {
+          console.log(`[ANULAR] No se encontró pago pendiente para la factura ${factura.numero}`)
         }
 
         // Actualizar el importe presupuestado (restar el importe de la factura anulada)
         const nuevoImportePresupuestado = Math.max(0, facturacion.importePresupuestado - factura.importe)
         
-        // Recalcular el estado de la facturación
+        // Recalcular el total pagado y el estado de la facturación
         const pagosCompletados = await prisma.pago.aggregate({
           where: {
             facturacionId: facturacion.id,
@@ -263,14 +275,22 @@ export async function DELETE(
           nuevoEstado = 'parcial'
         }
 
+        console.log(`[ANULAR] Actualizando facturación - nuevo presupuesto: ${nuevoImportePresupuestado}, total pagado: ${totalPagado}, nuevo estado: ${nuevoEstado}`)
+
         await prisma.facturacion.update({
           where: { id: facturacion.id },
           data: {
             importePresupuestado: nuevoImportePresupuestado,
+            importeFacturado: totalPagado,
             estado: nuevoEstado,
           }
         })
+        facturacionActualizada = true
+      } else {
+        console.log(`[ANULAR] No se encontró registro de facturación para expedienteId: ${factura.expedienteId}`)
       }
+    } else {
+      console.log(`[ANULAR] La factura no tiene expedienteId asociado`)
     }
 
     // Marcar factura como anulada
@@ -279,9 +299,16 @@ export async function DELETE(
       data: { estado: 'anulada' }
     })
 
+    console.log(`[ANULAR] Factura ${factura.numero} anulada correctamente`)
+
     return NextResponse.json({ 
       success: true, 
-      message: 'Factura anulada correctamente. Se ha eliminado el pago pendiente asociado.' 
+      message: 'Factura anulada correctamente',
+      detalles: {
+        facturaAnulada: factura.numero,
+        pagoPendienteEliminado: pagoEliminado,
+        facturacionActualizada: facturacionActualizada
+      }
     })
   } catch (error) {
     console.error('Error anulando factura:', error)

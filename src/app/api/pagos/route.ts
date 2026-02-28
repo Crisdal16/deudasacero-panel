@@ -13,7 +13,8 @@ export async function GET(request: NextRequest) {
 
     // Cliente ve sus propios pagos
     if (user.rol === 'cliente') {
-      const expediente = await prisma.expediente.findUnique({
+      // Usar findFirst en lugar de findUnique por si hay múltiples expedientes
+      const expedientes = await prisma.expediente.findMany({
         where: { clienteId: user.userId },
         include: {
           facturacion: {
@@ -26,11 +27,10 @@ export async function GET(request: NextRequest) {
         }
       })
 
-      if (!expediente || !expediente.facturacion) {
-        return NextResponse.json({ pagos: [] })
-      }
+      // Recopilar todos los pagos de todos los expedientes del cliente
+      const pagos = expedientes.flatMap(exp => exp.facturacion?.pagos || [])
 
-      return NextResponse.json({ pagos: expediente.facturacion.pagos })
+      return NextResponse.json({ pagos })
     }
 
     // Admin ve todos los pagos

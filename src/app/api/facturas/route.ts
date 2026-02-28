@@ -210,6 +210,7 @@ export async function POST(request: NextRequest) {
 }
 
 // PATCH - Actualizar estado de factura (solo admin)
+// NOTA: Para confirmar pago con actualización de pagos, usar PATCH /api/facturas/[id]
 export async function PATCH(request: NextRequest) {
   try {
     const user = await getCurrentUser()
