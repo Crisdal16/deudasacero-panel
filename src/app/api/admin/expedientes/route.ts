@@ -7,15 +7,6 @@ export async function GET(request: NextRequest) {
     try {
       const expedientes = await prisma.expediente.findMany({
         include: {
-          usuario: {
-            select: {
-              id: true,
-              nombre: true,
-              email: true,
-              telefono: true,
-              nif: true,
-            },
-          },
           cliente: {
             select: {
               id: true,

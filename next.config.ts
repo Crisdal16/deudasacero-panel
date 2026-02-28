@@ -5,6 +5,9 @@ const nextConfig: NextConfig = {
   reactStrictMode: false,
   
   // Ignorar errores de TypeScript durante build (temporal)
+  // TODO: Corregir errores de tipos en:
+  // - src/app/api/documentos/generar/route.ts
+  // - src/app/api/admin/usuarios/route.ts
   typescript: {
     ignoreBuildErrors: true,
   },

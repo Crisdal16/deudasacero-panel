@@ -35,7 +35,13 @@ export async function GET() {
     }
 
     // Si es cliente, obtener info de su expediente
-    let expedienteCliente = null
+    let expedienteCliente: {
+      id: string
+      referencia: string
+      faseActual: number
+      porcentajeAvance: number
+      estado: string
+    } | null = null
     if (fullUser?.rol === 'cliente') {
       expedienteCliente = await prisma.expediente.findFirst({
         where: { clienteId: user.userId },

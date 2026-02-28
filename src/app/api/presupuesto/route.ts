@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
 
     // Cliente obtiene su propio expediente
     if (user.rol === 'cliente') {
-      const expediente = await prisma.expediente.findUnique({
+      const expediente = await prisma.expediente.findFirst({
         where: { clienteId: user.userId },
       })
       expedienteId = expediente?.id

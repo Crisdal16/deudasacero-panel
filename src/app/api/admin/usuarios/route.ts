@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
         })
 
         // Si se solicita crear expediente
-        let expediente = null
+        let expediente: Awaited<ReturnType<typeof tx.expediente.create>> | null = null
         if (crearExpediente) {
           const year = new Date().getFullYear()
           const count = await tx.expediente.count()
