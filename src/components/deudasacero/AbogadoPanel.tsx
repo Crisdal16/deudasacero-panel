@@ -701,8 +701,13 @@ export function AbogadoPanel() {
                                   className={cn("h-6 w-6 p-0", isOwn && "text-white hover:bg-blue-600")}
                                   onClick={() => {
                                     if (msg.archivoContenido) {
+                                      // Añadir prefijo data: si no lo tiene
+                                      const mimeType = msg.archivoTipo || 'application/octet-stream'
+                                      const dataUrl = msg.archivoContenido.startsWith('data:')
+                                        ? msg.archivoContenido
+                                        : `data:${mimeType};base64,${msg.archivoContenido}`
                                       const link = document.createElement('a')
-                                      link.href = msg.archivoContenido
+                                      link.href = dataUrl
                                       link.download = msg.archivoNombre || 'archivo'
                                       document.body.appendChild(link)
                                       link.click()

@@ -164,9 +164,15 @@ export function Mensajes({
 
   const handleDownloadAttachment = (msg: Mensaje) => {
     if (!msg.archivoContenido) return
-    
+
+    // El contenido está guardado como base64 puro, necesitamos añadir el prefijo
+    const mimeType = msg.archivoTipo || 'application/octet-stream'
+    const dataUrl = msg.archivoContenido.startsWith('data:')
+      ? msg.archivoContenido
+      : `data:${mimeType};base64,${msg.archivoContenido}`
+
     const link = document.createElement('a')
-    link.href = msg.archivoContenido
+    link.href = dataUrl
     link.download = msg.archivoNombre || 'archivo'
     document.body.appendChild(link)
     link.click()
@@ -474,14 +480,20 @@ export function Mensajes({
           <div className="overflow-auto max-h-[60vh]">
             {previewAttachment?.archivoContenido && isImage(previewAttachment.archivoTipo) && (
               <img 
-                src={previewAttachment.archivoContenido} 
+                src={previewAttachment.archivoContenido.startsWith('data:')
+                  ? previewAttachment.archivoContenido
+                  : `data:${previewAttachment.archivoTipo};base64,${previewAttachment.archivoContenido}`
+                }
                 alt={previewAttachment.archivoNombre || 'Preview'}
                 className="max-w-full mx-auto"
               />
             )}
             {previewAttachment?.archivoContenido && isPdf(previewAttachment.archivoTipo) && (
               <iframe
-                src={previewAttachment.archivoContenido}
+                src={previewAttachment.archivoContenido.startsWith('data:')
+                  ? previewAttachment.archivoContenido
+                  : `data:${previewAttachment.archivoTipo};base64,${previewAttachment.archivoContenido}`
+                }
                 className="w-full h-[60vh]"
                 title={previewAttachment.archivoNombre || 'Preview'}
               />

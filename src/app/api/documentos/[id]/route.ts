@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
-// PATCH - Cambiar estado de documento (solo admin)
+// PATCH - Cambiar estado de documento (admin y abogados asignados)
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -16,13 +16,6 @@ export async function PATCH(
     );
   }
 
-  if (usuario.rol !== 'admin') {
-    return NextResponse.json(
-      { error: 'No autorizado' },
-      { status: 403 }
-    );
-  }
-
   try {
     const { id } = await params;
     const body = await request.json();
@@ -32,6 +25,26 @@ export async function PATCH(
       return NextResponse.json(
         { error: 'Estado inválido' },
         { status: 400 }
+      );
+    }
+
+    // Si es abogado, verificar que tiene acceso al documento
+    if (usuario.rol === 'abogado') {
+      const documento = await prisma.documento.findUnique({
+        where: { id },
+        include: { expediente: true }
+      });
+
+      if (!documento || documento.expediente.abogadoAsignadoId !== usuario.userId) {
+        return NextResponse.json(
+          { error: 'No tienes acceso a este documento' },
+          { status: 403 }
+        );
+      }
+    } else if (usuario.rol !== 'admin') {
+      return NextResponse.json(
+        { error: 'No autorizado' },
+        { status: 403 }
       );
     }
 
