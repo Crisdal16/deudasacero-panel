@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 
-// GET - Listar documentos del usuario
+// GET - Listar documentos del usuario INCLUYENDO el contenido
 export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser()
@@ -24,9 +24,24 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ documentos: [], checklist: [], faseActual: 1 })
       }
 
+      // IMPORTANTE: Incluir el campo contenido
       const documentos = await prisma.documento.findMany({
         where: { expedienteId: expediente.id },
         orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          nombre: true,
+          tipo: true,
+          estado: true,
+          esRequerido: true,
+          esJudicial: true,
+          fase: true,
+          fechaSubida: true,
+          nombreArchivo: true,
+          contenido: true, // <-- AÑADIDO: contenido del archivo
+          notas: true,
+          createdAt: true,
+        }
       })
 
       const checklist = await prisma.checklistDocumento.findMany({
@@ -53,9 +68,24 @@ export async function GET(request: NextRequest) {
           return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
         }
 
+        // IMPORTANTE: Incluir el campo contenido
         const documentos = await prisma.documento.findMany({
           where: { expedienteId: expediente.id },
           orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            nombre: true,
+            tipo: true,
+            estado: true,
+            esRequerido: true,
+            esJudicial: true,
+            fase: true,
+            fechaSubida: true,
+            nombreArchivo: true,
+            contenido: true, // <-- AÑADIDO
+            notas: true,
+            createdAt: true,
+          }
         })
 
         const checklist = await prisma.checklistDocumento.findMany({
@@ -82,7 +112,19 @@ export async function GET(request: NextRequest) {
       const documentos = await prisma.documento.findMany({
         where: { expedienteId: { in: expedienteIds } },
         orderBy: { createdAt: 'desc' },
-        include: {
+        select: {
+          id: true,
+          nombre: true,
+          tipo: true,
+          estado: true,
+          esRequerido: true,
+          esJudicial: true,
+          fase: true,
+          fechaSubida: true,
+          nombreArchivo: true,
+          contenido: true, // <-- AÑADIDO
+          notas: true,
+          createdAt: true,
           expediente: {
             select: { referencia: true }
           }
@@ -95,9 +137,24 @@ export async function GET(request: NextRequest) {
     // Admin ve documentos según expediente
     if (user.rol === 'admin') {
       if (expedienteId) {
+        // IMPORTANTE: Incluir el campo contenido
         const documentos = await prisma.documento.findMany({
           where: { expedienteId },
           orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            nombre: true,
+            tipo: true,
+            estado: true,
+            esRequerido: true,
+            esJudicial: true,
+            fase: true,
+            fechaSubida: true,
+            nombreArchivo: true,
+            contenido: true, // <-- AÑADIDO
+            notas: true,
+            createdAt: true,
+          }
         })
 
         const expediente = await prisma.expediente.findUnique({
@@ -121,7 +178,19 @@ export async function GET(request: NextRequest) {
       // Devolver todos los documentos
       const documentos = await prisma.documento.findMany({
         orderBy: { createdAt: 'desc' },
-        include: {
+        select: {
+          id: true,
+          nombre: true,
+          tipo: true,
+          estado: true,
+          esRequerido: true,
+          esJudicial: true,
+          fase: true,
+          fechaSubida: true,
+          nombreArchivo: true,
+          contenido: true, // <-- AÑADIDO
+          notas: true,
+          createdAt: true,
           expediente: {
             select: { referencia: true }
           }
@@ -240,11 +309,11 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PATCH - Cambiar estado de documento (solo admin)
+// PATCH - Cambiar estado de documento (admin y abogado)
 export async function PATCH(request: NextRequest) {
   const user = await getCurrentUser()
 
-  if (!user || user.rol !== 'admin') {
+  if (!user || (user.rol !== 'admin' && user.rol !== 'abogado')) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   }
 
@@ -257,6 +326,18 @@ export async function PATCH(request: NextRequest) {
         { error: 'ID y estado son requeridos' },
         { status: 400 }
       )
+    }
+
+    // Si es abogado, verificar que tiene acceso al documento
+    if (user.rol === 'abogado') {
+      const documento = await prisma.documento.findUnique({
+        where: { id },
+        include: { expediente: true }
+      })
+      
+      if (!documento || documento.expediente.abogadoAsignadoId !== user.userId) {
+        return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
+      }
     }
 
     const documento = await prisma.documento.update({

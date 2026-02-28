@@ -216,6 +216,7 @@ model Mensaje {
   expedienteId   String
   usuarioId      String
   remitente      String    // cliente, abogado, admin
+  destinatario   String?   // cliente, abogado, admin - a quién va dirigido
   texto          String    @db.Text
   leido          Boolean   @default(false)
   fechaEnvio     DateTime  @default(now())
@@ -231,6 +232,7 @@ model Mensaje {
   @@index([expedienteId])
   @@index([usuarioId])
   @@index([fechaEnvio])
+  @@index([destinatario])
 }
 
 // =============================================

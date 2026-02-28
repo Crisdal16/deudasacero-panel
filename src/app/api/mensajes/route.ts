@@ -3,7 +3,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { sendNewMessageEmail } from '@/lib/email'
 
-// GET - Listar mensajes del expediente con nombre del remitente
+// GET - Listar mensajes del expediente con nombre del remitente y adjuntos
 export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser()
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ mensajes: [] })
     }
 
-    // Obtener mensajes con información del remitente
+    // Obtener mensajes con información del remitente Y los adjuntos
     const mensajes = await prisma.mensaje.findMany({
       where: { expedienteId: expId },
       orderBy: { fechaEnvio: 'asc' },
@@ -61,21 +61,27 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    // Marcar mensajes recibidos como leídos
-    const remitenteOpuesto = user.rol === 'cliente' 
-      ? ['admin', 'abogado'] 
-      : ['cliente']
+    // Marcar mensajes recibidos como leídos según el destinatario
+    // Un mensaje es "para mí" si:
+    // - Soy cliente y el destinatario es 'cliente' o null (mensaje general)
+    // - Soy abogado y el destinatario es 'abogado' o null
+    // - Soy admin y el destinatario es 'admin' o null
+    const destinatarioParaUsuario = user.rol
     
     await prisma.mensaje.updateMany({
       where: {
         expedienteId: expId,
-        remitente: { in: remitenteOpuesto },
+        remitente: { not: user.rol },
+        OR: [
+          { destinatario: destinatarioParaUsuario },
+          { destinatario: null }, // Mensajes generales sin destinatario específico
+        ],
         leido: false,
       },
       data: { leido: true },
     })
 
-    // Formatear respuesta
+    // Formatear respuesta INCLUYENDO los adjuntos y destinatario
     const mensajesFormateados = mensajes.map(msg => ({
       id: msg.id,
       texto: msg.texto,
@@ -83,6 +89,10 @@ export async function GET(request: NextRequest) {
       remitenteNombre: msg.usuario?.nombre || 'Sistema',
       fechaEnvio: msg.fechaEnvio.toISOString(),
       leido: msg.leido,
+      destinatario: msg.destinatario,
+      archivoNombre: msg.archivoNombre,
+      archivoContenido: msg.archivoContenido,
+      archivoTipo: msg.archivoTipo,
     }))
 
     return NextResponse.json({ mensajes: mensajesFormateados })
@@ -114,7 +124,8 @@ export async function POST(request: NextRequest) {
       destinatario // 'abogado', 'admin', 'cliente'
     } = body
 
-    if (!texto || texto.trim().length === 0) {
+    // Permitir mensajes vacíos SOLO si hay archivo adjunto
+    if ((!texto || texto.trim().length === 0) && !archivoContenido) {
       return NextResponse.json(
         { error: 'El mensaje no puede estar vacío' },
         { status: 400 }
@@ -180,13 +191,17 @@ export async function POST(request: NextRequest) {
     if (user.rol === 'admin') remitente = 'admin'
     else if (user.rol === 'abogado') remitente = 'abogado'
 
-    // Crear mensaje con o sin adjunto
+    // Crear mensaje CON todos los campos incluyendo adjuntos y destinatario
     const mensaje = await prisma.mensaje.create({
       data: {
         expedienteId: expId,
         usuarioId: user.userId,
         remitente,
-        texto: texto.trim(),
+        destinatario: destinatario || null,
+        texto: texto?.trim() || '',
+        archivoNombre: archivoNombre || null,
+        archivoContenido: archivoContenido || null,
+        archivoTipo: archivoTipo || null,
       },
       include: {
         usuario: {
@@ -196,10 +211,6 @@ export async function POST(request: NextRequest) {
         },
       },
     })
-
-    // Si hay adjunto, guardarlo usando MensajeDirecto o actualizar el mensaje
-    // Por ahora, guardamos el adjunto en una estructura separada si es necesario
-    // O podemos extender el modelo Mensaje para incluir adjuntos
 
     // Enviar email de notificación al destinatario correspondiente
     try {
@@ -219,7 +230,7 @@ export async function POST(request: NextRequest) {
               admin.email,
               admin.nombre,
               remitenteNombre,
-              texto.trim(),
+              texto?.trim() || 'Archivo adjunto',
               expediente.referencia
             )
           }
@@ -230,7 +241,7 @@ export async function POST(request: NextRequest) {
               expediente.abogadoAsignado.email,
               expediente.abogadoAsignado.nombre,
               remitenteNombre,
-              texto.trim(),
+              texto?.trim() || 'Archivo adjunto',
               expediente.referencia
             )
           } else {
@@ -245,7 +256,7 @@ export async function POST(request: NextRequest) {
                 admin.email,
                 admin.nombre,
                 remitenteNombre,
-                texto.trim(),
+                texto?.trim() || 'Archivo adjunto',
                 expediente.referencia
               )
             }
@@ -264,7 +275,7 @@ export async function POST(request: NextRequest) {
               admin.email,
               admin.nombre,
               remitenteNombre,
-              texto.trim(),
+              texto?.trim() || 'Archivo adjunto',
               expediente.referencia
             )
           }
@@ -275,19 +286,28 @@ export async function POST(request: NextRequest) {
               expediente.cliente.email,
               expediente.cliente.nombre,
               remitenteNombre,
-              texto.trim(),
+              texto?.trim() || 'Archivo adjunto',
               expediente.referencia
             )
           }
         }
       } else if (user.rol === 'admin') {
-        // Notificar al cliente
-        if (expediente.cliente?.email) {
+        // Admin puede notificar a cliente o abogado según destinatario
+        if (destinatario === 'abogado' && expediente.abogadoAsignado?.email) {
+          await sendNewMessageEmail(
+            expediente.abogadoAsignado.email,
+            expediente.abogadoAsignado.nombre,
+            'Administración',
+            texto?.trim() || 'Archivo adjunto',
+            expediente.referencia
+          )
+        } else if (expediente.cliente?.email) {
+          // Por defecto notificar al cliente
           await sendNewMessageEmail(
             expediente.cliente.email,
             expediente.cliente.nombre,
             'Administración',
-            texto.trim(),
+            texto?.trim() || 'Archivo adjunto',
             expediente.referencia
           )
         }
@@ -306,10 +326,10 @@ export async function POST(request: NextRequest) {
         remitenteNombre: mensaje.usuario?.nombre || user.nombre,
         fechaEnvio: mensaje.fechaEnvio.toISOString(),
         leido: mensaje.leido,
-        archivoNombre: archivoNombre || null,
-        archivoContenido: archivoContenido || null,
-        archivoTipo: archivoTipo || null,
-        destinatario: destinatario || null,
+        destinatario: mensaje.destinatario,
+        archivoNombre: mensaje.archivoNombre,
+        archivoContenido: mensaje.archivoContenido,
+        archivoTipo: mensaje.archivoTipo,
       }
     })
   } catch (error) {

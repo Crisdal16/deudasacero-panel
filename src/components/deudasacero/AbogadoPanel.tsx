@@ -29,7 +29,10 @@ import {
   Send,
   CheckCircle2,
   AlertCircle,
-  Loader2
+  Loader2,
+  Paperclip,
+  Download,
+  Building2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -69,6 +72,10 @@ interface Expediente {
     remitenteNombre?: string
     fechaEnvio: string
     leido: boolean
+    destinatario?: string | null
+    archivoNombre?: string | null
+    archivoContenido?: string | null
+    archivoTipo?: string | null
   }>
   deudaTotal: number
   documentosPendientes: number
@@ -96,6 +103,7 @@ export function AbogadoPanel() {
   const [view, setView] = useState<'list' | 'detail' | 'documentos' | 'mensajes'>('list')
   const [nuevoMensaje, setNuevoMensaje] = useState('')
   const [enviandoMensaje, setEnviandoMensaje] = useState(false)
+  const [destinatarioSeleccionado, setDestinatarioSeleccionado] = useState<'cliente' | 'admin'>('cliente')
   const { toast } = useToast()
 
   const fetchExpedientes = async () => {
@@ -162,7 +170,7 @@ export function AbogadoPanel() {
     setView('detail')
   }
 
-  const handleEnviarMensaje = async () => {
+  const handleEnviarMensaje = async (destinatario: string = 'cliente') => {
     if (!nuevoMensaje.trim() || !selectedExpediente) return
 
     setEnviandoMensaje(true)
@@ -173,6 +181,7 @@ export function AbogadoPanel() {
         body: JSON.stringify({
           texto: nuevoMensaje.trim(),
           expedienteId: selectedExpediente.id,
+          destinatario: destinatario, // 'cliente' o 'admin'
         }),
       })
       
@@ -183,7 +192,7 @@ export function AbogadoPanel() {
       
       toast({
         title: 'Mensaje enviado',
-        description: 'El mensaje ha sido enviado correctamente',
+        description: `El mensaje ha sido enviado a ${destinatario === 'admin' ? 'administración' : 'el cliente'}`,
       })
     } catch (error) {
       toast({
@@ -651,9 +660,9 @@ export function AbogadoPanel() {
                           className={cn("flex gap-3", isOwn ? "justify-end" : "justify-start")}
                         >
                           {!isOwn && (
-                            <Avatar className="w-8 h-8 bg-green-600">
-                              <AvatarFallback className="bg-green-600 text-white">
-                                {msg.remitenteNombre?.charAt(0) || 'C'}
+                            <Avatar className={cn("w-8 h-8", msg.remitente === 'admin' ? 'bg-purple-600' : 'bg-green-600')}>
+                              <AvatarFallback className={cn(msg.remitente === 'admin' ? 'bg-purple-600' : 'bg-green-600', "text-white")}>
+                                {msg.remitente === 'admin' ? <Building2 className="w-4 h-4" /> : (msg.remitenteNombre?.charAt(0) || 'C')}
                               </AvatarFallback>
                             </Avatar>
                           )}
@@ -664,7 +673,47 @@ export function AbogadoPanel() {
                               ? "bg-blue-600 text-white rounded-2xl rounded-br-sm" 
                               : "bg-gray-100 text-gray-900 rounded-2xl rounded-bl-sm"
                           )}>
+                            {/* Mostrar remitente y destinatario */}
+                            {!isOwn && msg.remitenteNombre && (
+                              <p className="text-xs font-medium text-blue-600 mb-1">
+                                {msg.remitenteNombre}
+                                {msg.destinatario && (
+                                  <span className="text-gray-400 ml-2">
+                                    → {msg.destinatario === 'admin' ? 'Administración' : msg.destinatario === 'abogado' ? 'Abogado' : 'Cliente'}
+                                  </span>
+                                )}
+                              </p>
+                            )}
+                            
                             <p className="text-sm">{msg.texto}</p>
+                            
+                            {/* Mostrar adjunto si existe */}
+                            {msg.archivoContenido && (
+                              <div className={cn(
+                                "mt-2 p-2 rounded-lg flex items-center gap-2",
+                                isOwn ? "bg-blue-700" : "bg-gray-200"
+                              )}>
+                                <Paperclip className="w-4 h-4" />
+                                <span className="text-sm flex-1 truncate">{msg.archivoNombre}</span>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className={cn("h-6 w-6 p-0", isOwn && "text-white hover:bg-blue-600")}
+                                  onClick={() => {
+                                    if (msg.archivoContenido) {
+                                      const link = document.createElement('a')
+                                      link.href = msg.archivoContenido
+                                      link.download = msg.archivoNombre || 'archivo'
+                                      document.body.appendChild(link)
+                                      link.click()
+                                      document.body.removeChild(link)
+                                    }
+                                  }}
+                                >
+                                  <Download className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            )}
                             
                             <div className={cn(
                               "flex items-center justify-end gap-1 mt-1",
@@ -687,25 +736,52 @@ export function AbogadoPanel() {
               </ScrollArea>
             </CardContent>
 
-            <form onSubmit={(e) => { e.preventDefault(); handleEnviarMensaje(); }} className="border-t p-4 flex gap-2">
-              <Input
-                placeholder="Escribe tu mensaje..."
-                value={nuevoMensaje}
-                onChange={(e) => setNuevoMensaje(e.target.value)}
-                disabled={enviandoMensaje}
-                className="flex-1"
-              />
-              <Button 
-                type="submit" 
-                className="bg-blue-600 hover:bg-blue-700" 
-                disabled={enviandoMensaje || !nuevoMensaje.trim()}
-              >
-                {enviandoMensaje ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Send className="w-4 h-4" />
-                )}
-              </Button>
+            <form onSubmit={(e) => { e.preventDefault(); handleEnviarMensaje(destinatarioSeleccionado); }} className="border-t p-4 space-y-3">
+              {/* Selector de destinatario */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600">Enviar a:</span>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={destinatarioSeleccionado === 'cliente' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setDestinatarioSeleccionado('cliente')}
+                    className={destinatarioSeleccionado === 'cliente' ? 'bg-blue-900 hover:bg-blue-800' : ''}
+                  >
+                    Cliente
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={destinatarioSeleccionado === 'admin' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setDestinatarioSeleccionado('admin')}
+                    className={destinatarioSeleccionado === 'admin' ? 'bg-blue-900 hover:bg-blue-800' : ''}
+                  >
+                    Administración
+                  </Button>
+                </div>
+              </div>
+              
+              <div className="flex gap-2">
+                <Input
+                  placeholder={`Escribe tu mensaje para ${destinatarioSeleccionado === 'admin' ? 'administración' : 'el cliente'}...`}
+                  value={nuevoMensaje}
+                  onChange={(e) => setNuevoMensaje(e.target.value)}
+                  disabled={enviandoMensaje}
+                  className="flex-1"
+                />
+                <Button 
+                  type="submit" 
+                  className="bg-blue-600 hover:bg-blue-700" 
+                  disabled={enviandoMensaje || !nuevoMensaje.trim()}
+                >
+                  {enviandoMensaje ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
             </form>
           </Card>
         </div>

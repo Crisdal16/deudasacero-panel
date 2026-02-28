@@ -62,6 +62,8 @@ export async function GET(
             fechaSubida: true,
             nombreArchivo: true,
             esRequerido: true,
+            contenido: true, // <-- AÑADIDO: contenido del archivo
+            fase: true,
           },
           orderBy: { createdAt: 'desc' }
         },
@@ -88,7 +90,7 @@ export async function GET(
     const documentosPendientes = expediente.documentos.filter(d => d.estado === 'pendiente' || d.estado === 'subido').length
     const mensajesNuevos = expediente.mensajes.filter(m => !m.leido && m.remitente !== user.rol).length
 
-    // Formatear mensajes
+    // Formatear mensajes INCLUYENDO adjuntos y destinatario
     const mensajesFormateados = expediente.mensajes.map(msg => ({
       id: msg.id,
       texto: msg.texto,
@@ -96,6 +98,10 @@ export async function GET(
       remitenteNombre: msg.usuario?.nombre || 'Sistema',
       fechaEnvio: msg.fechaEnvio.toISOString(),
       leido: msg.leido,
+      destinatario: msg.destinatario,
+      archivoNombre: msg.archivoNombre,
+      archivoContenido: msg.archivoContenido,
+      archivoTipo: msg.archivoTipo,
     }))
 
     return NextResponse.json({
