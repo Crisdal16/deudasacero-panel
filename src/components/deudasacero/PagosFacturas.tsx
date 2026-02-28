@@ -35,6 +35,7 @@ interface Factura {
   fecha: string
   importe: number
   estado: string
+  concepto?: string
   contenido?: string
   nombreArchivo?: string
 }
@@ -88,6 +89,7 @@ export function PagosFacturas({ userRol }: PagosFacturasProps) {
   const getEstadoBadge = (estado: string) => {
     switch (estado) {
       case 'pagado':
+      case 'pagada':
         return (
           <Badge className="bg-green-100 text-green-800">
             <CheckCircle2 className="w-3 h-3 mr-1" />
@@ -95,10 +97,17 @@ export function PagosFacturas({ userRol }: PagosFacturasProps) {
           </Badge>
         )
       case 'vencido':
+      case 'vencida':
         return (
           <Badge variant="destructive">
             <AlertCircle className="w-3 h-3 mr-1" />
             Vencido
+          </Badge>
+        )
+      case 'anulada':
+        return (
+          <Badge variant="outline" className="bg-gray-100 text-gray-600 border-gray-200">
+            Anulada
           </Badge>
         )
       default:
@@ -142,6 +151,9 @@ export function PagosFacturas({ userRol }: PagosFacturasProps) {
   // Calcular totales
   const totalPagado = pagos.filter(p => p.estado === 'pagado').reduce((sum, p) => sum + p.importe, 0)
   const totalPendiente = pagos.filter(p => p.estado === 'pendiente').reduce((sum, p) => sum + p.importe, 0)
+  
+  // Filtrar facturas anuladas para el cliente
+  const facturasVisibles = facturas.filter(f => f.estado !== 'anulada')
 
   if (loading) {
     return (
@@ -278,35 +290,59 @@ export function PagosFacturas({ userRol }: PagosFacturasProps) {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {facturas.length === 0 ? (
+          {facturasVisibles.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               <FileText className="w-12 h-12 mx-auto mb-3 text-gray-300" />
               <p>No hay facturas disponibles</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {facturas.map((factura) => (
+              {facturasVisibles.map((factura) => (
                 <div 
                   key={factura.id}
-                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border"
+                  className={`flex items-center justify-between p-4 rounded-lg border ${
+                    factura.estado === 'pagada' 
+                      ? 'bg-green-50 border-green-200' 
+                      : factura.estado === 'anulada'
+                        ? 'bg-gray-50 border-gray-200 opacity-50'
+                        : 'bg-yellow-50 border-yellow-200'
+                  }`}
                 >
                   <div className="flex items-center gap-4">
-                    <div className="p-2 bg-blue-100 rounded-full">
-                      <FileText className="w-5 h-5 text-blue-600" />
+                    <div className={`p-2 rounded-full ${
+                      factura.estado === 'pagada' 
+                        ? 'bg-green-100' 
+                        : factura.estado === 'anulada'
+                          ? 'bg-gray-100'
+                          : 'bg-yellow-100'
+                    }`}>
+                      <FileText className={`w-5 h-5 ${
+                        factura.estado === 'pagada' 
+                          ? 'text-green-600' 
+                          : factura.estado === 'anulada'
+                            ? 'text-gray-400'
+                            : 'text-yellow-600'
+                      }`} />
                     </div>
                     <div>
                       <p className="font-medium text-gray-900">
                         Factura {factura.numero}
                       </p>
                       <p className="text-sm text-gray-500">
+                        {factura.concepto || 'Servicios profesionales'}
+                      </p>
+                      <p className="text-xs text-gray-400">
                         Fecha: {formatDate(factura.fecha)}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
-                    <p className="text-lg font-bold text-gray-900">
-                      {formatCurrency(factura.importe)}
-                    </p>
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-gray-900">
+                        {formatCurrency(factura.importe)}
+                      </p>
+                      {getEstadoBadge(factura.estado)}
+                    </div>
                     <Button 
                       variant="outline" 
                       size="sm"
