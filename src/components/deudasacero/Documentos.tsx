@@ -497,13 +497,11 @@ export function Documentos({
         ref={fileInputRef}
         type="file"
         id="global-file-input"
-        style={{ position: 'absolute', left: '-9999px', opacity: 0 }}
-        onChange={handleFileInput}
-        accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx"
-        tabIndex={-1}
-      />
-
-      {/* Modal de subida con drag and drop */}
+        style={{ display: 'none' }}
+                onChange={handleFileInput}
+                accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx"
+                tabIndex={-1}
+              />* Modal de subida con drag and drop */}
       <Dialog open={showUpload} onOpenChange={setShowUpload}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
