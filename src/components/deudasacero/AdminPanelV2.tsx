@@ -51,7 +51,11 @@ import {
   CreditCard,
   Receipt,
   Plus,
-  Eye
+  Eye,
+  Download,
+  CheckCircle,
+  AlertCircle,
+  Trash2
 } from 'lucide-react'
 import { TimelineSelector, fasesLSO } from './Timeline'
 import { cn } from '@/lib/utils'
@@ -156,13 +160,15 @@ export function AdminPanelV2() {
   const [showMensajesDialog, setShowMensajesDialog] = useState(false)
   const [showFacturacionDialog, setShowFacturacionDialog] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [activeTab, setActiveTab] = useState<'expedientes' | 'clientes' | 'abogados' | 'mensajes'>('expedientes')
+  const [activeTab, setActiveTab] = useState<'expedientes' | 'clientes' | 'abogados' | 'mensajes' | 'facturas'>('expedientes')
   const [mensajes, setMensajes] = useState<Mensaje[]>([])
   const [nuevoMensaje, setNuevoMensaje] = useState('')
   const [enviandoMensaje, setEnviandoMensaje] = useState(false)
   const [destinatarioMensaje, setDestinatarioMensaje] = useState<'cliente' | 'abogado'>('cliente')
   const [totalPagosPendientes, setTotalPagosPendientes] = useState(0)
   const [facturasPendientes, setFacturasPendientes] = useState<Factura[]>([])
+  const [todasFacturas, setTodasFacturas] = useState<Factura[]>([])
+  const [metodoPagoConfirmacion, setMetodoPagoConfirmacion] = useState<string>('transferencia')
   const { toast } = useToast()
 
   // Formulario nuevo abogado
@@ -196,16 +202,18 @@ export function AdminPanelV2() {
   const fetchData = async () => {
     setLoading(true)
     try {
-      const [expRes, abogRes, clientRes, pagosRes] = await Promise.all([
+      const [expRes, abogRes, clientRes, pagosRes, facturasRes] = await Promise.all([
         fetch('/api/expedientes'),
         fetch('/api/admin/abogados'),
         fetch('/api/admin/usuarios?rol=cliente'),
         fetch('/api/admin/pagos-pendientes'),
+        fetch('/api/facturas'),
       ])
       const expData = await expRes.json()
       const abogData = await abogRes.json()
       const clientData = await clientRes.json()
       const pagosData = await pagosRes.json()
+      const facturasData = await facturasRes.json()
       
       setExpedientes(expData.expedientes || [])
       setAbogados(abogData.abogados || [])
@@ -215,6 +223,8 @@ export function AdminPanelV2() {
         setTotalPagosPendientes(pagosData.resumen.totalFacturasPendientes || 0)
         setFacturasPendientes(pagosData.facturasPendientes || [])
       }
+      
+      setTodasFacturas(facturasData.facturas || [])
     } catch (error) {
       console.error('Error fetching data:', error)
       toast({
@@ -510,6 +520,114 @@ export function AdminPanelV2() {
     setShowFaseDialog(true)
   }
 
+  // Descargar factura
+  const handleDownloadFactura = async (facturaId: string, numero: string) => {
+    try {
+      const res = await fetch(`/api/facturas/${facturaId}/download`)
+      const data = await res.json()
+      
+      if (!res.ok) throw new Error(data.error || 'Error al descargar')
+      
+      // Crear enlace de descarga
+      const link = document.createElement('a')
+      link.href = `data:application/pdf;base64,${data.contenido}`
+      link.download = `factura-${numero}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      
+      toast({
+        title: 'Descargando factura',
+        description: `La factura ${numero} se está descargando`,
+      })
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'No se pudo descargar la factura',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  // Confirmar pago de factura
+  const handleConfirmarPago = async (facturaId: string, numero: string) => {
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/facturas/${facturaId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          estado: 'pagada',
+          metodoPago: metodoPagoConfirmacion 
+        }),
+      })
+      
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Error al confirmar pago')
+      }
+      
+      toast({
+        title: 'Pago confirmado',
+        description: `La factura ${numero} ha sido marcada como pagada`,
+      })
+      fetchData()
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'No se pudo confirmar el pago',
+        variant: 'destructive',
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Anular factura
+  const handleAnularFactura = async (facturaId: string, numero: string) => {
+    if (!confirm('¿Estás seguro de que deseas anular esta factura?')) return
+    
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/facturas/${facturaId}`, {
+        method: 'DELETE',
+      })
+      
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Error al anular')
+      }
+      
+      toast({
+        title: 'Factura anulada',
+        description: `La factura ${numero} ha sido anulada`,
+      })
+      fetchData()
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'No se pudo anular la factura',
+        variant: 'destructive',
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Obtener badge de estado de factura
+  const getEstadoFacturaBadge = (estado: string) => {
+    switch (estado) {
+      case 'pagada':
+        return <Badge className="bg-green-100 text-green-800"><CheckCircle className="w-3 h-3 mr-1" />Pagada</Badge>
+      case 'vencida':
+        return <Badge variant="destructive"><AlertCircle className="w-3 h-3 mr-1" />Vencida</Badge>
+      case 'anulada':
+        return <Badge variant="outline" className="bg-gray-100 text-gray-600"><Trash2 className="w-3 h-3 mr-1" />Anulada</Badge>
+      default:
+        return <Badge variant="outline" className="bg-yellow-50 text-yellow-800 border-yellow-200"><Clock className="w-3 h-3 mr-1" />Pendiente</Badge>
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -600,10 +718,11 @@ export function AdminPanelV2() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="expedientes">Expedientes</TabsTrigger>
           <TabsTrigger value="clientes">Clientes</TabsTrigger>
           <TabsTrigger value="abogados">Abogados</TabsTrigger>
+          <TabsTrigger value="facturas">Facturas</TabsTrigger>
           <TabsTrigger value="mensajes">Mensajes</TabsTrigger>
         </TabsList>
 
@@ -837,6 +956,100 @@ export function AdminPanelV2() {
                           <Badge className={abog.activo ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
                             {abog.activo ? 'Activo' : 'Inactivo'}
                           </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Contenido: Facturas */}
+        <TabsContent value="facturas">
+          <Card className="border-blue-100">
+            <CardHeader>
+              <CardTitle className="text-blue-900 flex items-center gap-2">
+                <Receipt className="w-5 h-5" />
+                Gestión de Facturas
+              </CardTitle>
+              <CardDescription>
+                Gestiona todas las facturas, confirma pagos y descarga documentos
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="text-center py-8 text-gray-500">Cargando...</div>
+              ) : todasFacturas.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <Receipt className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                  <p>No hay facturas registradas</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Número</TableHead>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Expediente</TableHead>
+                      <TableHead>Concepto</TableHead>
+                      <TableHead>Importe</TableHead>
+                      <TableHead>Fecha Emisión</TableHead>
+                      <TableHead>Estado</TableHead>
+                      <TableHead>Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {todasFacturas.map((factura) => (
+                      <TableRow key={factura.id}>
+                        <TableCell className="font-medium">{factura.numero}</TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{factura.usuario?.nombre || '-'}</p>
+                            <p className="text-xs text-gray-500">{factura.usuario?.email}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>{factura.expediente?.referencia || '-'}</TableCell>
+                        <TableCell className="max-w-[200px] truncate">{factura.concepto}</TableCell>
+                        <TableCell className="font-bold">{formatCurrency(factura.importe)}</TableCell>
+                        <TableCell>{formatDate(factura.fechaEmision)}</TableCell>
+                        <TableCell>{getEstadoFacturaBadge(factura.estado)}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDownloadFactura(factura.id, factura.numero)}
+                              title="Descargar factura"
+                            >
+                              <Download className="w-4 h-4" />
+                            </Button>
+                            {factura.estado === 'emitida' && (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleConfirmarPago(factura.id, factura.numero)}
+                                  className="bg-green-50 hover:bg-green-100 text-green-700"
+                                  title="Confirmar pago"
+                                  disabled={saving}
+                                >
+                                  <CheckCircle className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleAnularFactura(factura.id, factura.numero)}
+                                  className="bg-red-50 hover:bg-red-100 text-red-700"
+                                  title="Anular factura"
+                                  disabled={saving}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}

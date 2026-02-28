@@ -143,6 +143,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Crear la factura
     const factura = await prisma.factura.create({
       data: {
         usuarioId,
@@ -156,6 +157,47 @@ export async function POST(request: NextRequest) {
         estado: 'emitida',
       },
     })
+
+    // Si hay expedienteId, crear/actualizar el sistema de pagos pendientes
+    if (expedienteId) {
+      // Buscar o crear el registro de facturación del expediente
+      let facturacion = await prisma.facturacion.findUnique({
+        where: { expedienteId }
+      })
+
+      if (!facturacion) {
+        // Crear registro de facturación si no existe
+        facturacion = await prisma.facturacion.create({
+          data: {
+            expedienteId,
+            importePresupuestado: importe,
+            importeFacturado: 0,
+            estado: 'pendiente',
+          }
+        })
+      } else {
+        // Actualizar el presupuesto sumando la nueva factura
+        await prisma.facturacion.update({
+          where: { id: facturacion.id },
+          data: {
+            importePresupuestado: facturacion.importePresupuestado + importe,
+            estado: facturacion.importeFacturado < (facturacion.importePresupuestado + importe) ? 'pendiente' : facturacion.estado,
+          }
+        })
+      }
+
+      // Crear un pago pendiente asociado a esta factura
+      await prisma.pago.create({
+        data: {
+          facturacionId: facturacion.id,
+          concepto: `Factura ${numero} - ${concepto}`,
+          importe,
+          estado: 'pendiente',
+          fechaVencimiento: fechaVencimiento ? new Date(fechaVencimiento) : null,
+          notas: `Generado automáticamente desde factura ${numero}`,
+        }
+      })
+    }
 
     return NextResponse.json({ success: true, factura })
   } catch (error) {
