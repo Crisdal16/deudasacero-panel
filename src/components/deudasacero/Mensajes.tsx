@@ -137,9 +137,11 @@ export function Mensajes({
     setEnviando(true)
     try {
       if (selectedFile && filePreview) {
+        // Quitar el prefijo data:*/*;base64, para guardar solo el base64
+        const base64Content = filePreview.split(',')[1] || filePreview
         await onEnviar(nuevoMensaje.trim(), {
           nombre: selectedFile.name,
-          contenido: filePreview,
+          contenido: base64Content,
           tipo: selectedFile.type,
         }, destinatarioSeleccionado)
       } else {

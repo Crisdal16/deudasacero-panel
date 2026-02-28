@@ -351,7 +351,11 @@ export default function Home() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     })
-    if (!res.ok) throw new Error('Error al subir documento')
+    const responseData = await res.json()
+    if (!res.ok) {
+      console.error('Error subiendo documento:', responseData)
+      throw new Error(responseData.error || 'Error al subir documento')
+    }
     fetchDocumentos()
   }
 
@@ -377,7 +381,11 @@ export default function Home() {
         destinatario 
       }),
     })
-    if (!res.ok) throw new Error('Error al enviar mensaje')
+    const data = await res.json()
+    if (!res.ok) {
+      console.error('Error enviando mensaje:', data)
+      throw new Error(data.error || 'Error al enviar mensaje')
+    }
     fetchMensajes()
   }
 
