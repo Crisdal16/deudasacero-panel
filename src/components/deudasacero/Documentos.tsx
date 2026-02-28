@@ -492,6 +492,17 @@ export function Documentos({
         </CardContent>
       </Card>
 
+      {/* Input file FUERA del Dialog - a nivel raíz del componente */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        id="global-file-input"
+        style={{ position: 'absolute', left: '-9999px', opacity: 0 }}
+        onChange={handleFileInput}
+        accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx"
+        tabIndex={-1}
+      />
+
       {/* Modal de subida con drag and drop */}
       <Dialog open={showUpload} onOpenChange={setShowUpload}>
         <DialogContent className="max-w-lg">
@@ -503,19 +514,10 @@ export function Documentos({
           </DialogHeader>
           
           <form onSubmit={handleUpload} className="space-y-4">
-            {/* SOLUCIÓN ROBUSTA: Input file con label */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              id="file-upload-input"
-              style={{ display: 'none' }}
-              onChange={handleFileInput}
-              accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx"
-            />
-            
-            {/* Drop zone */}
-            <div
-              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${
+            {/* Drop zone con LABEL que conecta al input */}
+            <label
+              htmlFor="global-file-input"
+              className={`block border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${
                 dragActive 
                   ? 'border-blue-500 bg-blue-50' 
                   : selectedFile
@@ -526,10 +528,15 @@ export function Documentos({
               onDragLeave={handleDrag}
               onDragOver={handleDrag}
               onDrop={handleDrop}
-              onClick={() => !selectedFile && fileInputRef.current?.click()}
+              onClick={(e) => {
+                // Si ya hay archivo, no abrir selector
+                if (selectedFile) {
+                  e.preventDefault()
+                }
+              }}
             >
               {selectedFile ? (
-                <div className="space-y-3" onClick={(e) => e.stopPropagation()}>
+                <div className="space-y-3" onClick={(e) => e.preventDefault()}>
                   {previewUrl ? (
                     <img src={previewUrl} alt="Preview" className="max-h-32 mx-auto rounded" />
                   ) : (
@@ -541,11 +548,11 @@ export function Documentos({
                       {(selectedFile.size / 1024).toFixed(1)} KB
                     </p>
                   </div>
-                  <Button
+                  <button
                     type="button"
-                    variant="outline"
-                    size="sm"
+                    className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2"
                     onClick={(e) => {
+                      e.preventDefault()
                       e.stopPropagation()
                       setSelectedFile(null)
                       setPreviewUrl(null)
@@ -556,7 +563,7 @@ export function Documentos({
                   >
                     <X className="w-4 h-4 mr-1" />
                     Cambiar archivo
-                  </Button>
+                  </button>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -572,7 +579,7 @@ export function Documentos({
                   </p>
                 </div>
               )}
-            </div>
+            </label>
 
             {/* Progress bar */}
             {uploading && (
