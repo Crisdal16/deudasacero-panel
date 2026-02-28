@@ -1,12 +1,19 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Modo estricto de React desactivado para evitar warnings en producción
+  reactStrictMode: false,
+  
+  // Output standalone para producción
   output: "standalone",
-  /* config options here */
+  
+  // Ignorar errores de TypeScript durante build (temporal)
   typescript: {
     ignoreBuildErrors: true,
   },
-  reactStrictMode: false,
+  
+  // Configuración de powering by header (ocultar X-Powered-By)
+  poweredByHeader: false,
 };
 
 export default nextConfig;
