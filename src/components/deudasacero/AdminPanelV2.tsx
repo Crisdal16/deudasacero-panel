@@ -55,7 +55,8 @@ import {
   Download,
   CheckCircle,
   AlertCircle,
-  Trash2
+  Trash2,
+  XCircle
 } from 'lucide-react'
 import { TimelineSelector, fasesLSO } from './Timeline'
 import { cn } from '@/lib/utils'
@@ -627,6 +628,69 @@ export function AdminPanelV2() {
     }
   }
 
+  // Eliminar usuario (cliente o abogado)
+  const handleEliminarUsuario = async (usuarioId: string, nombre: string, rol: 'cliente' | 'abogado') => {
+    if (!confirm(`¿Estás seguro de que deseas eliminar a "${nombre}"?\n\nEsta acción no se puede deshacer.`)) return
+    
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/admin/usuarios/${usuarioId}`, {
+        method: 'DELETE',
+      })
+      
+      const data = await res.json()
+      
+      if (!res.ok) {
+        throw new Error(data.error || 'Error al eliminar')
+      }
+      
+      toast({
+        title: `${rol === 'cliente' ? 'Cliente' : 'Abogado'} eliminado`,
+        description: data.message || `El ${rol} ha sido eliminado correctamente`,
+      })
+      fetchData()
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || `No se pudo eliminar el ${rol}`,
+        variant: 'destructive',
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Activar/Desactivar usuario
+  const handleToggleUsuario = async (usuarioId: string, activo: boolean, nombre: string) => {
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/admin/usuarios/${usuarioId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ activo }),
+      })
+      
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Error al actualizar')
+      }
+      
+      toast({
+        title: activo ? 'Usuario activado' : 'Usuario desactivado',
+        description: `${nombre} ha sido ${activo ? 'activado' : 'desactivado'} correctamente`,
+      })
+      fetchData()
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'No se pudo actualizar el usuario',
+        variant: 'destructive',
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
   // Obtener badge de estado de factura
   const getEstadoFacturaBadge = (estado: string) => {
     switch (estado) {
@@ -877,6 +941,14 @@ export function AdminPanelV2() {
             <CardContent>
               {loading ? (
                 <div className="text-center py-8 text-gray-500">Cargando...</div>
+              ) : clientes.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <Users className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                  <p>No hay clientes registrados</p>
+                  <Button onClick={() => setShowClienteDialog(true)} className="mt-4">
+                    Añadir primer cliente
+                  </Button>
+                </div>
               ) : (
                 <Table>
                   <TableHeader>
@@ -888,6 +960,7 @@ export function AdminPanelV2() {
                       <TableHead>Expedientes</TableHead>
                       <TableHead>Último Acceso</TableHead>
                       <TableHead>Estado</TableHead>
+                      <TableHead>Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -909,6 +982,33 @@ export function AdminPanelV2() {
                           <Badge className={cliente.activo ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
                             {cliente.activo ? 'Activo' : 'Inactivo'}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleToggleUsuario(cliente.id, !cliente.activo, cliente.nombre)}
+                              title={cliente.activo ? 'Desactivar' : 'Activar'}
+                              disabled={saving}
+                            >
+                              {cliente.activo ? (
+                                <XCircle className="w-4 h-4 text-orange-600" />
+                              ) : (
+                                <CheckCircle className="w-4 h-4 text-green-600" />
+                              )}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEliminarUsuario(cliente.id, cliente.nombre, 'cliente')}
+                              className="border-red-300 text-red-600 hover:bg-red-50"
+                              title="Eliminar cliente"
+                              disabled={saving}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -952,6 +1052,7 @@ export function AdminPanelV2() {
                       <TableHead>Teléfono</TableHead>
                       <TableHead>Expedientes Asignados</TableHead>
                       <TableHead>Estado</TableHead>
+                      <TableHead>Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -969,6 +1070,33 @@ export function AdminPanelV2() {
                           <Badge className={abog.activo ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
                             {abog.activo ? 'Activo' : 'Inactivo'}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleToggleUsuario(abog.id, !abog.activo, abog.nombre)}
+                              title={abog.activo ? 'Desactivar' : 'Activar'}
+                              disabled={saving}
+                            >
+                              {abog.activo ? (
+                                <XCircle className="w-4 h-4 text-orange-600" />
+                              ) : (
+                                <CheckCircle className="w-4 h-4 text-green-600" />
+                              )}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEliminarUsuario(abog.id, abog.nombre, 'abogado')}
+                              className="border-red-300 text-red-600 hover:bg-red-50"
+                              title="Eliminar abogado"
+                              disabled={saving}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
