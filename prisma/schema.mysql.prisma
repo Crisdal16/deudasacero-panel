@@ -1,0 +1,130 @@
+// =============================================
+// Deudas a Cero - Schema para PRODUCCIÓN MySQL
+// =============================================
+// Este archivo es para IONOS con MySQL
+// DATABASE_URL="mysql://usuario:password@host:3306/deudasacero"
+// 
+// Para usar este schema en producción:
+// 1. Copia este contenido a schema.prisma
+// 2. O usa: npx prisma db push --schema=prisma/schema.mysql.prisma
+// =============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================
+// MODELOS
+// =============================================
+
+model Usuario {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  nombre    String
+  telefono  String?  @db.VarChar(20)
+  nif       String?  @db.VarChar(15)
+  rol       String   @default("cliente") @db.VarChar(20) // cliente, admin
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  expediente Expediente?
+  mensajes   Mensaje[]
+  
+  @@index([email])
+  @@index([rol])
+}
+
+model Expediente {
+  id                 String    @id @default(cuid())
+  referencia         String    @unique @db.VarChar(50)
+  usuarioId          String    @unique
+  juzgado            String?   @db.VarChar(255)
+  tipoProcedimiento  String    @default("persona_fisica") @db.VarChar(30) // persona_fisica, autonomo
+  faseActual         Int       @default(1)
+  porcentajeAvance   Int       @default(0)
+  fechaPresentacion  DateTime?
+  abogadoAsignado    String?   @db.VarChar(255)
+  notasInternas      String?   @db.Text
+  
+  // Datos del cliente para LSO
+  situacionLaboral   String?   @db.VarChar(100)
+  buenaFe            Boolean   @default(false)
+  sinAntecedentes    Boolean   @default(false)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  usuario    Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  deudas     Deuda[]
+  documentos Documento[]
+  mensajes   Mensaje[]
+  
+  @@index([referencia])
+  @@index([faseActual])
+}
+
+model Deuda {
+  id           String   @id @default(cuid())
+  expedienteId String
+  tipo         String   @db.VarChar(30) // financiera, publica, proveedores, hipoteca, otros
+  importe      Float
+  descripcion  String?  @db.Text
+  acreedor     String?  @db.VarChar(255)
+  
+  createdAt DateTime @default(now())
+  
+  expediente Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+  
+  @@index([expedienteId])
+  @@index([tipo])
+}
+
+model Documento {
+  id           String   @id @default(cuid())
+  expedienteId String
+  nombre       String   @db.VarChar(255)
+  tipo         String   @db.VarChar(30) // DNI, IRPF, auto, nomina, certificado, otro
+  ruta         String?  @db.VarChar(500)
+  contenido    String?  @db.LongText // Base64 para almacenamiento simple
+  estado       String   @default("pendiente") @db.VarChar(20) // pendiente, revisado, rechazado
+  esRequerido  Boolean  @default(false)
+  fechaSubida  DateTime @default(now())
+  
+  expediente Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+  
+  @@index([expedienteId])
+  @@index([tipo])
+  @@index([estado])
+}
+
+model Mensaje {
+  id           String   @id @default(cuid())
+  expedienteId String
+  usuarioId    String
+  remitente    String   @db.VarChar(20) // cliente, despacho
+  texto        String   @db.Text
+  leido        Boolean  @default(false)
+  fechaEnvio   DateTime @default(now())
+  
+  expediente Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+  usuario    Usuario    @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  
+  @@index([expedienteId])
+  @@index([usuarioId])
+  @@index([fechaEnvio])
+}
+
+model FAQ {
+  id        String @id @default(cuid())
+  pregunta  String @db.Text
+  respuesta String @db.Text
+  orden     Int    @default(0)
+  
+  @@index([orden])
+}

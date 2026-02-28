@@ -49,3 +49,9 @@ prompt
 server.log
 # Skills directory
 /skills/
+# Database
+/db/
+*.db
+
+# Temp
+deudasacero-temp/

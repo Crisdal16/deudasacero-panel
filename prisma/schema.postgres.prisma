@@ -1,0 +1,126 @@
+// =============================================
+// Deudas a Cero - Schema Prisma (PostgreSQL)
+// =============================================
+// PARA VERCEL + NEON (PostgreSQL):
+//   DATABASE_URL="postgresql://usuario:password@ep-xxx.neon.tech/deudasacero?sslmode=require"
+// =============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================
+// MODELOS
+// =============================================
+
+model Usuario {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  nombre    String
+  telefono  String?
+  nif       String?
+  rol       String   @default("cliente") // cliente, admin
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  expediente Expediente?
+  mensajes   Mensaje[]
+  
+  @@index([email])
+  @@index([rol])
+}
+
+model Expediente {
+  id                 String   @id @default(cuid())
+  referencia         String   @unique
+  usuarioId          String   @unique
+  juzgado            String?
+  tipoProcedimiento  String   @default("persona_fisica") // persona_fisica, autonomo
+  faseActual         Int      @default(1)
+  porcentajeAvance   Int      @default(0)
+  fechaPresentacion  DateTime?
+  abogadoAsignado    String?
+  notasInternas      String?  @db.Text
+  
+  // Datos del cliente para LSO
+  situacionLaboral   String?
+  buenaFe            Boolean  @default(false)
+  sinAntecedentes    Boolean  @default(false)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  usuario    Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  deudas     Deuda[]
+  documentos Documento[]
+  mensajes   Mensaje[]
+  
+  @@index([referencia])
+  @@index([faseActual])
+}
+
+model Deuda {
+  id           String   @id @default(cuid())
+  expedienteId String
+  tipo         String   // financiera, publica, proveedores, hipoteca, otros
+  importe      Float
+  descripcion  String?  @db.Text
+  acreedor     String?
+  
+  createdAt DateTime @default(now())
+  
+  expediente Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+  
+  @@index([expedienteId])
+  @@index([tipo])
+}
+
+model Documento {
+  id           String   @id @default(cuid())
+  expedienteId String
+  nombre       String
+  tipo         String   // DNI, IRPF, auto, nomina, certificado, otro
+  ruta         String?
+  contenido    String?  @db.Text // Base64 para almacenamiento simple
+  estado       String   @default("pendiente") // pendiente, revisado, rechazado
+  esRequerido  Boolean  @default(false)
+  fechaSubida  DateTime @default(now())
+  
+  expediente Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+  
+  @@index([expedienteId])
+  @@index([tipo])
+  @@index([estado])
+}
+
+model Mensaje {
+  id           String   @id @default(cuid())
+  expedienteId String
+  usuarioId    String
+  remitente    String   // cliente, despacho
+  texto        String   @db.Text
+  leido        Boolean  @default(false)
+  fechaEnvio   DateTime @default(now())
+  
+  expediente Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+  usuario    Usuario    @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  
+  @@index([expedienteId])
+  @@index([usuarioId])
+  @@index([fechaEnvio])
+}
+
+model FAQ {
+  id        String @id @default(cuid())
+  pregunta  String @db.Text
+  respuesta String @db.Text
+  orden     Int    @default(0)
+  
+  @@index([orden])
+}
