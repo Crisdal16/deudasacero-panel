@@ -232,13 +232,17 @@ export async function DELETE(
       if (facturacion) {
         console.log(`[ANULAR] Buscando pago pendiente para facturacionId: ${facturacion.id}, numero factura: ${factura.numero}`)
 
-        // Buscar y eliminar el pago pendiente asociado a esta factura
-        // Buscar por concepto que contenga el número de factura
+        // Buscar el pago pendiente asociado a esta factura
+        // Buscar por concepto que contenga el número de factura (formato: "Factura F2024-XXXX - concepto")
+        // También buscar si el concepto es exactamente el número de factura
         const pagoPendiente = await prisma.pago.findFirst({
           where: {
             facturacionId: facturacion.id,
-            concepto: { contains: factura.numero },
-            estado: 'pendiente'
+            estado: 'pendiente',
+            OR: [
+              { concepto: { contains: factura.numero } },
+              { concepto: { contains: `Factura ${factura.numero}` } },
+            ]
           }
         })
 
@@ -250,6 +254,14 @@ export async function DELETE(
           pagoEliminado = true
         } else {
           console.log(`[ANULAR] No se encontró pago pendiente para la factura ${factura.numero}`)
+          // Listar todos los pagos pendientes para debug
+          const todosPendientes = await prisma.pago.findMany({
+            where: {
+              facturacionId: facturacion.id,
+              estado: 'pendiente'
+            }
+          })
+          console.log(`[ANULAR] Pagos pendientes existentes:`, todosPendientes.map(p => ({ id: p.id, concepto: p.concepto, importe: p.importe })))
         }
 
         // Actualizar el importe presupuestado (restar el importe de la factura anulada)

@@ -25,7 +25,13 @@ export async function GET(request: NextRequest) {
         },
       })
 
-      return NextResponse.json({ facturas })
+      // Devolver también el estado de cada factura
+      return NextResponse.json({ 
+        facturas: facturas.map(f => ({
+          ...f,
+          fecha: f.fechaEmision, // Para compatibilidad
+        }))
+      })
     }
 
     // Admin ve todas las facturas

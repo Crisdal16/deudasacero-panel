@@ -13,7 +13,8 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
-  Loader2
+  Loader2,
+  RefreshCw
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
@@ -48,14 +49,17 @@ export function PagosFacturas({ userRol }: PagosFacturasProps) {
   const [pagos, setPagos] = useState<Pago[]>([])
   const [facturas, setFacturas] = useState<Factura[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const { toast } = useToast()
 
   useEffect(() => {
     fetchData()
   }, [])
 
-  const fetchData = async () => {
-    setLoading(true)
+  const fetchData = async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true)
+    else setLoading(true)
+    
     try {
       const [pagosRes, facturasRes] = await Promise.all([
         fetch('/api/pagos'),
@@ -67,10 +71,23 @@ export function PagosFacturas({ userRol }: PagosFacturasProps) {
       
       setPagos(pagosData.pagos || [])
       setFacturas(facturasData.facturas || [])
+      
+      if (isRefresh) {
+        toast({
+          title: 'Datos actualizados',
+          description: 'La información de pagos y facturas se ha actualizado',
+        })
+      }
     } catch (error) {
       console.error('Error fetching pagos:', error)
+      toast({
+        title: 'Error',
+        description: 'No se pudieron cargar los datos',
+        variant: 'destructive',
+      })
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }
 
@@ -165,9 +182,19 @@ export function PagosFacturas({ userRol }: PagosFacturasProps) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-blue-900">Mis Pagos y Facturas</h1>
-        <p className="text-gray-600">Historial de pagos y documentos de facturación</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-blue-900">Mis Pagos y Facturas</h1>
+          <p className="text-gray-600">Historial de pagos y documentos de facturación</p>
+        </div>
+        <Button 
+          onClick={() => fetchData(true)} 
+          variant="outline" 
+          disabled={refreshing}
+        >
+          <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+          Actualizar
+        </Button>
       </div>
 
       {/* Resumen */}
