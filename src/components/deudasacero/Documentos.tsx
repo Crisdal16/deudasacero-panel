@@ -503,9 +503,20 @@ export function Documentos({
           </DialogHeader>
           
           <form onSubmit={handleUpload} className="space-y-4">
+            {/* Input file - FUERA del drop zone para evitar conflictos */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              id="file-upload"
+              name="file-upload"
+              className="hidden"
+              onChange={handleFileInput}
+              accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx"
+            />
+            
             {/* Drop zone */}
             <div
-              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${
                 dragActive 
                   ? 'border-blue-500 bg-blue-50' 
                   : selectedFile
@@ -516,17 +527,10 @@ export function Documentos({
               onDragLeave={handleDrag}
               onDragOver={handleDrag}
               onDrop={handleDrop}
+              onClick={() => !selectedFile && fileInputRef.current?.click()}
             >
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="hidden"
-                onChange={handleFileInput}
-                accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx"
-              />
-              
               {selectedFile ? (
-                <div className="space-y-3">
+                <div className="space-y-3" onClick={(e) => e.stopPropagation()}>
                   {previewUrl ? (
                     <img src={previewUrl} alt="Preview" className="max-h-32 mx-auto rounded" />
                   ) : (
@@ -542,9 +546,13 @@ export function Documentos({
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation()
                       setSelectedFile(null)
                       setPreviewUrl(null)
+                      if (fileInputRef.current) {
+                        fileInputRef.current.value = ''
+                      }
                     }}
                   >
                     <X className="w-4 h-4 mr-1" />
@@ -558,15 +566,7 @@ export function Documentos({
                     <p className="font-medium text-gray-900">
                       Arrastra un archivo aquí
                     </p>
-                    <p className="text-sm text-gray-500">o</p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="mt-2"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      Seleccionar archivo
-                    </Button>
+                    <p className="text-sm text-gray-500">o haz clic para seleccionar</p>
                   </div>
                   <p className="text-xs text-gray-400">
                     PDF, JPG, PNG, DOC, XLS (máx. 10MB)
